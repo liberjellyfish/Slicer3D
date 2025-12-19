@@ -207,12 +207,26 @@ public class SliceController : MonoBehaviour
 
         if (result.PositiveMesh.vertexCount == 0 || result.NegativeMesh.vertexCount == 0) return;
 
-        // 生成结果物体
-        GameObject hullPos = CreateHull(target, result.PositiveMesh, "Pos");
-        GameObject hullNeg = CreateHull(target, result.NegativeMesh, "Neg");
+        // --- 核心更新：使用 MeshSeparator 处理凹多面体 ---
+        // 切割结果可能包含多个不相连的部分（例如 U 型物体切底），需要分离
+        List<Mesh> posMeshes = MeshSeparator.Separate(result.PositiveMesh);
+        List<Mesh> negMeshes = MeshSeparator.Separate(result.NegativeMesh);
 
-        // 播放分离动画
-        StartCoroutine(AnimateSeparation(hullPos.transform, hullNeg.transform, planeWorld.normal));
+        // 生成 Positive 侧的所有物体
+        foreach (var mesh in posMeshes)
+        {
+            GameObject hull = CreateHull(target, mesh, "Pos");
+            // 沿法线方向移动
+            StartCoroutine(AnimateSeparationSingle(hull.transform, planeWorld.normal));
+        }
+
+        // 生成 Negative 侧的所有物体
+        foreach (var mesh in negMeshes)
+        {
+            GameObject hull = CreateHull(target, mesh, "Neg");
+            // 沿法线反方向移动
+            StartCoroutine(AnimateSeparationSingle(hull.transform, -planeWorld.normal));
+        }
 
         // 销毁原物体
         Destroy(target);
@@ -241,16 +255,13 @@ public class SliceController : MonoBehaviour
         Material[] originalMats = original.GetComponent<MeshRenderer>().materials;
 
         // 智能材质分配逻辑：修复“紫色平面”问题
-        // 如果新 Mesh 的 SubMesh 数量大于原材质数量，说明生成了独立的切面 SubMesh
         if (newMesh.subMeshCount > originalMats.Length)
         {
             Material[] newMats = new Material[newMesh.subMeshCount];
-            // 1. 复制原有材质
             for (int i = 0; i < originalMats.Length; i++)
             {
                 newMats[i] = originalMats[i];
             }
-            // 2. 填充剩余的槽位（通常是切面）
             Material capMat = crossSectionMaterial != null ? crossSectionMaterial : originalMats[0];
             for (int i = originalMats.Length; i < newMats.Length; i++)
             {
@@ -260,7 +271,6 @@ public class SliceController : MonoBehaviour
         }
         else
         {
-            // 如果 SubMesh 数量一致，直接复用
             mr.materials = originalMats;
         }
 
@@ -275,33 +285,28 @@ public class SliceController : MonoBehaviour
         return hull;
     }
 
-    private IEnumerator AnimateSeparation(Transform t1, Transform t2, Vector3 normal)
+    // 重构：只处理单个物体的移动动画
+    private IEnumerator AnimateSeparationSingle(Transform t, Vector3 direction)
     {
         float elapsed = 0f;
-        Vector3 p1Start = t1.position;
-        Vector3 p2Start = t2.position;
-
-        Vector3 p1End = p1Start + normal * separationDistance;
-        Vector3 p2End = p2Start - normal * separationDistance;
+        Vector3 pStart = t.position;
+        Vector3 pEnd = pStart + direction * separationDistance;
 
         while (elapsed < separationDuration)
         {
-            // 防御性检查：防止物体在动画中途被销毁
-            if (t1 == null || t2 == null) yield break;
+            // 防御性检查
+            if (t == null) yield break;
 
-            float t = elapsed / separationDuration;
-            t = Mathf.Sin(t * Mathf.PI * 0.5f); // Ease-Out
+            float r = elapsed / separationDuration;
+            r = Mathf.Sin(r * Mathf.PI * 0.5f); // Ease-Out
 
-            t1.position = Vector3.Lerp(p1Start, p1End, t);
-            t2.position = Vector3.Lerp(p2Start, p2End, t);
+            t.position = Vector3.Lerp(pStart, pEnd, r);
 
             elapsed += Time.deltaTime;
             yield return null;
         }
 
-        // 确保最终位置
-        if (t1 != null) t1.position = p1End;
-        if (t2 != null) t2.position = p2End;
+        if (t != null) t.position = pEnd;
     }
 
     #endregion
