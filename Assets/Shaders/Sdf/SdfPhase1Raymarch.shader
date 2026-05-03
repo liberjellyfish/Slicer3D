@@ -21,6 +21,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
         _CutPlaneNormal ("Cut Plane Normal (Object Space)", Vector) = (0.8, 0.2, 0.0, 0.0)
         _CutPlaneOffset ("Cut Plane Offset", Float) = 0.0
 
+        [HideInInspector] _CutPlaneCount ("Cut Plane Count", Int) = 0
         [HideInInspector] _ProxyBoundsMin ("Proxy Bounds Min", Vector) = (-0.5, -0.5, -0.5, 0.0)
         [HideInInspector] _ProxyBoundsMax ("Proxy Bounds Max", Vector) = (0.5, 0.5, 0.5, 0.0)
     }
@@ -62,6 +63,12 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float3 positionWS : TEXCOORD0;
             };
 
+            struct CutPlaneData
+            {
+                float3 normal;
+                float distance;
+            };
+
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseColor;
                 float _AmbientStrength;
@@ -76,9 +83,12 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float4 _BoxExtents;
                 float4 _CutPlaneNormal;
                 float _CutPlaneOffset;
+                int _CutPlaneCount;
                 float4 _ProxyBoundsMin;
                 float4 _ProxyBoundsMax;
             CBUFFER_END
+
+            StructuredBuffer<CutPlaneData> _CutPlanes;
 
             Varyings vert(Attributes input)
             {
