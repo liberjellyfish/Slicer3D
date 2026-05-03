@@ -7,6 +7,24 @@ Shader "Custom/Sdf/Phase1Raymarch"
         _AmbientStrength ("Ambient Strength", Range(0.0, 1.0)) = 0.15
         _DiffuseStrength ("Diffuse Strength", Range(0.0, 2.0)) = 1.0
 
+        [Header(Shadowing)]
+        _ReceiveMainLightShadowStrength ("Receive Main Light Shadow Strength", Range(0.0, 1.0)) = 1.0
+        _SdfSoftShadowStrength ("SDF Soft Shadow Strength", Range(0.0, 1.0)) = 0.85
+        _SdfSoftShadowSharpness ("SDF Soft Shadow Sharpness", Range(1.0, 64.0)) = 16.0
+        _SdfSoftShadowSteps ("SDF Soft Shadow Steps", Range(4, 64)) = 24
+        _SdfSoftShadowStart ("SDF Soft Shadow Start", Float) = 0.01
+        _SdfSoftShadowDistance ("SDF Soft Shadow Distance", Float) = 1.5
+        _SdfSoftShadowNormalBias ("SDF Soft Shadow Normal Bias", Float) = 0.005
+
+        [Header(Cut Surface)]
+        _CutFaceColor ("Cut Face Color", Color) = (0.97, 0.43, 0.31, 1.0)
+        _CutFaceBlend ("Cut Face Blend", Range(0.0, 1.0)) = 0.85
+        _CutFaceOcclusionStrength ("Cut Face Occlusion Strength", Range(0.0, 1.0)) = 0.45
+        _CutFaceOcclusionDistance ("Cut Face Occlusion Distance", Float) = 0.2
+        _CutFaceBandSoftness ("Cut Face Band Softness", Float) = 0.01
+        _CutFaceEdgeWidth ("Cut Face Edge Width", Float) = 0.04
+        _CutFaceEdgeBoost ("Cut Face Edge Boost", Range(0.0, 2.0)) = 0.35
+
         [Header(Ray Marching)]
         _MaxSteps ("Max Steps", Range(8, 256)) = 96
         _MaxDistance ("Max Distance", Float) = 8.0
@@ -48,6 +66,8 @@ Shader "Custom/Sdf/Phase1Raymarch"
             #pragma target 4.5
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile_fragment _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT _SHADOWS_SOFT_LOW _SHADOWS_SOFT_MEDIUM _SHADOWS_SOFT_HIGH
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -71,10 +91,34 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float3 padding;
             };
 
+            struct SdfSurfaceData
+            {
+                float baseDistance;
+                float finalDistance;
+                float cutMask;
+                float edgeMask;
+                float cutOcclusion;
+                float3 cutNormalOS;
+            };
+
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseColor;
                 float _AmbientStrength;
                 float _DiffuseStrength;
+                float _ReceiveMainLightShadowStrength;
+                float _SdfSoftShadowStrength;
+                float _SdfSoftShadowSharpness;
+                float _SdfSoftShadowSteps;
+                float _SdfSoftShadowStart;
+                float _SdfSoftShadowDistance;
+                float _SdfSoftShadowNormalBias;
+                float4 _CutFaceColor;
+                float _CutFaceBlend;
+                float _CutFaceOcclusionStrength;
+                float _CutFaceOcclusionDistance;
+                float _CutFaceBandSoftness;
+                float _CutFaceEdgeWidth;
+                float _CutFaceEdgeBoost;
                 float _MaxSteps;
                 float _MaxDistance;
                 float _HitEpsilon;
@@ -125,25 +169,28 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return max(boxDistance, planeDistance);
             }
 
-            float Map(float3 p)
+            float BaseShapeMap(float3 p)
             {
                 float sphereDistance = SdSphere(p, _SphereCenter.xyz, _SphereRadius);
                 float clippedBoxDistance = SdClippedBox(p);
-                float d = sphereDistance;
-
                 int shapeMode = (int)round(_ShapeMode);
+
                 if (shapeMode == 0)
                 {
-                    d = sphereDistance;
+                    return sphereDistance;
                 }
-                else if (shapeMode == 1)
+
+                if (shapeMode == 1)
                 {
-                    d = clippedBoxDistance;
+                    return clippedBoxDistance;
                 }
-                else
-                {
-                    d = min(sphereDistance, clippedBoxDistance);
-                }
+
+                return min(sphereDistance, clippedBoxDistance);
+            }
+
+            float ApplyCutPlanes(float3 p, float baseDistance)
+            {
+                float d = baseDistance;
 
                 [loop]
                 for (int i = 0; i < _CutPlaneCount; i++)
@@ -154,6 +201,61 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 }
 
                 return d;
+            }
+
+            float Map(float3 p)
+            {
+                return ApplyCutPlanes(p, BaseShapeMap(p));
+            }
+
+            SdfSurfaceData EvaluateSurfaceData(float3 p)
+            {
+                SdfSurfaceData surfaceData;
+                surfaceData.baseDistance = BaseShapeMap(p);
+                surfaceData.finalDistance = surfaceData.baseDistance;
+                surfaceData.cutMask = 0.0;
+                surfaceData.edgeMask = 0.0;
+                surfaceData.cutOcclusion = 1.0;
+                surfaceData.cutNormalOS = float3(0.0, 1.0, 0.0);
+
+                float dominantHalfSpace = -1e20;
+                float3 dominantNormalOS = float3(0.0, 1.0, 0.0);
+
+                [loop]
+                for (int i = 0; i < _CutPlaneCount; i++)
+                {
+                    float planeSdf = dot(p, _CutPlanes[i].normal) + _CutPlanes[i].distance;
+                    float halfSpaceSdf = -(planeSdf * _CutPlanes[i].sideSign);
+
+                    if (halfSpaceSdf > dominantHalfSpace)
+                    {
+                        dominantHalfSpace = halfSpaceSdf;
+                        dominantNormalOS = normalize(-_CutPlanes[i].normal * _CutPlanes[i].sideSign);
+                    }
+                }
+
+                surfaceData.finalDistance = _CutPlaneCount > 0
+                    ? max(surfaceData.baseDistance, dominantHalfSpace)
+                    : surfaceData.baseDistance;
+
+                if (_CutPlaneCount <= 0)
+                {
+                    return surfaceData;
+                }
+
+                float bandSoftness = max(_CutFaceBandSoftness, _HitEpsilon);
+                float cutDominance = dominantHalfSpace - surfaceData.baseDistance;
+                surfaceData.cutMask = smoothstep(-bandSoftness, bandSoftness, cutDominance);
+                surfaceData.cutNormalOS = dominantNormalOS;
+
+                float edgeWidth = max(_CutFaceEdgeWidth, _HitEpsilon);
+                surfaceData.edgeMask = 1.0 - smoothstep(0.0, edgeWidth, abs(surfaceData.baseDistance));
+
+                float aoDistance = max(_CutFaceOcclusionDistance, edgeWidth);
+                float interiorDepth = saturate((-surfaceData.baseDistance) / aoDistance);
+                surfaceData.cutOcclusion = 1.0 - interiorDepth * _CutFaceOcclusionStrength;
+
+                return surfaceData;
             }
 
             float3 EstimateNormalOS(float3 p)
@@ -186,6 +288,78 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 tExit = min(min(tMax.x, tMax.y), tMax.z);
 
                 return tExit >= max(tEnter, 0.0);
+            }
+
+            float SampleSdfSoftShadow(float3 rayOriginOS, float3 rayDirOS, float maxDistance)
+            {
+                if (_SdfSoftShadowStrength <= 0.0 || _SdfSoftShadowSteps < 1.0 || maxDistance <= 0.0)
+                {
+                    return 1.0;
+                }
+
+                float minStep = max(_HitEpsilon * 0.5, 0.001);
+                float maxStep = max(minStep, maxDistance * 0.25);
+                float softness = max(_SdfSoftShadowSharpness, 1.0);
+                float shadow = 1.0;
+                float t = max(_SdfSoftShadowStart, _HitEpsilon * 2.0);
+
+                [loop]
+                for (int stepIndex = 0; stepIndex < (int)_SdfSoftShadowSteps; stepIndex++)
+                {
+                    if (t >= maxDistance)
+                    {
+                        break;
+                    }
+
+                    float h = Map(rayOriginOS + rayDirOS * t);
+                    if (h < _HitEpsilon)
+                    {
+                        return 0.0;
+                    }
+
+                    shadow = min(shadow, softness * h / max(t, 1e-4));
+                    t += clamp(h, minStep, maxStep);
+                }
+
+                return saturate(shadow);
+            }
+
+            float3 EvaluateLighting(
+                float3 hitPositionOS,
+                float3 hitPositionWS,
+                float3 normalOS,
+                float3 normalWS,
+                SdfSurfaceData surfaceData)
+            {
+                float4 shadowCoord = TransformWorldToShadowCoord(hitPositionWS);
+                Light mainLight = GetMainLight(shadowCoord);
+
+                float3 lightDirWS = normalize(mainLight.direction);
+                float3 lightDirOS = normalize(TransformWorldToObjectDir(lightDirWS));
+                float ndotl = saturate(dot(normalWS, lightDirWS));
+
+                float mainLightShadow = lerp(1.0, mainLight.shadowAttenuation, saturate(_ReceiveMainLightShadowStrength));
+
+                float shadowDistance = max(_SdfSoftShadowDistance, 0.0);
+                float sdfSoftShadow = SampleSdfSoftShadow(
+                    hitPositionOS + normalOS * _SdfSoftShadowNormalBias,
+                    lightDirOS,
+                    shadowDistance);
+                sdfSoftShadow = lerp(1.0, sdfSoftShadow, saturate(_SdfSoftShadowStrength));
+
+                float totalShadow = saturate(mainLightShadow * sdfSoftShadow);
+                float cutMask = saturate(surfaceData.cutMask);
+                float cutOcclusion = lerp(1.0, surfaceData.cutOcclusion, cutMask);
+
+                float3 baseColor = _BaseColor.rgb;
+                float3 cutColor = lerp(baseColor, _CutFaceColor.rgb, saturate(_CutFaceBlend));
+                float3 surfaceColor = lerp(baseColor, cutColor, cutMask);
+
+                float3 ambient = surfaceColor * _AmbientStrength * cutOcclusion;
+                float3 diffuse = surfaceColor * mainLight.color * (ndotl * _DiffuseStrength * totalShadow) * cutOcclusion;
+                float3 edgeAccent = cutMask * surfaceData.edgeMask * _CutFaceEdgeBoost * mainLight.color * totalShadow;
+
+                return ambient + diffuse + edgeAccent;
             }
 
             half4 frag(Varyings input) : SV_Target
@@ -235,18 +409,13 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     clip(-1.0);
                 }
 
-                float3 normalOS = EstimateNormalOS(hitPositionOS);
+                SdfSurfaceData surfaceData = EvaluateSurfaceData(hitPositionOS);
+                float3 estimatedNormalOS = EstimateNormalOS(hitPositionOS);
+                float3 normalOS = normalize(lerp(estimatedNormalOS, surfaceData.cutNormalOS, surfaceData.cutMask));
+                float3 hitPositionWS = TransformObjectToWorld(hitPositionOS);
                 float3 normalWS = normalize(TransformObjectToWorldNormal(normalOS));
 
-                Light mainLight = GetMainLight();
-                float3 lightDirWS = normalize(mainLight.direction);
-                float ndotl = saturate(dot(normalWS, lightDirWS));
-
-                float3 baseColor = _BaseColor.rgb;
-                float3 ambient = baseColor * _AmbientStrength;
-                float3 diffuse = baseColor * mainLight.color * (ndotl * _DiffuseStrength);
-                float3 finalColor = ambient + diffuse;
-
+                float3 finalColor = EvaluateLighting(hitPositionOS, hitPositionWS, normalOS, normalWS, surfaceData);
                 return half4(finalColor, 1.0);
             }
             ENDHLSL
