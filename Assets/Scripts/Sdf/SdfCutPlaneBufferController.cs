@@ -40,6 +40,7 @@ public class SdfCutPlaneBufferController : MonoBehaviour
     private MaterialPropertyBlock propertyBlock;
 
     public int UploadedPlaneCount => uploadedPlaneCount;
+    public bool HasUploadedPlanes => hasUploadedPlanes;
 
     private void OnEnable()
     {
@@ -144,6 +145,23 @@ public class SdfCutPlaneBufferController : MonoBehaviour
 
         newPlanes[uploadedPlaneCount] = localPlane;
         SetPlanes(newPlanes);
+    }
+
+    public CutPlaneData[] GetUploadedPlanesCopy()
+    {
+        if (!uploadCache.IsCreated || uploadedPlaneCount <= 0)
+        {
+            return Array.Empty<CutPlaneData>();
+        }
+
+        return CopyUploadedPlanes();
+    }
+
+    public void SetRuntimePlanes(CutPlaneData[] planes)
+    {
+        uploadDebugPlanesOnEnable = false;
+        debugPlanes = Array.Empty<CutPlaneData>();
+        SetPlanes(planes);
     }
 
     private void CacheComponents()
