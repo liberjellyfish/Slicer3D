@@ -240,6 +240,53 @@ MonoBehaviour:
   m_LightCookieSize: {x: 1, y: 1}
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 0
+--- !u!1 &286169586
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 286169588}
+  - component: {fileID: 286169587}
+  m_Layer: 0
+  m_Name: OrbitFocusAnchor
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &286169587
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 286169586}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 75329189b2d166040b2dd6013d7931d6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  initialFocusSource: {fileID: 0}
+  sourceOffset: {x: 0, y: 0, z: 0}
+  initializeOnEnable: 1
+--- !u!4 &286169588
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 286169586}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1109503982
 GameObject:
   m_ObjectHideFlags: 0
@@ -252,6 +299,7 @@ GameObject:
   - component: {fileID: 1109503984}
   - component: {fileID: 1109503983}
   - component: {fileID: 1109503986}
+  - component: {fileID: 1109503987}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -377,6 +425,38 @@ MonoBehaviour:
     m_MipBias: 0
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
+--- !u!114 &1109503987
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1109503982}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1aea84fc922c4ca40b624be8deace930, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  target: {fileID: 286169588}
+  targetOffset: {x: 0, y: 0, z: 0}
+  autoInitializeFromCurrentTransform: 1
+  radius: 6
+  yaw: 0
+  pitch: 20
+  horizontalSpeed: 120
+  verticalSpeed: 120
+  zoomSpeed: 1
+  minRadius: 1.5
+  maxRadius: 12
+  minPitch: -70
+  maxPitch: 80
+  allowKeyboardControl: 1
+  allowScrollZoom: 1
+  rotateLeftKey: 97
+  rotateRightKey: 100
+  rotateUpKey: 119
+  rotateDownKey: 115
+  resetKey: 114
 --- !u!1 &1570979115
 GameObject:
   m_ObjectHideFlags: 0
@@ -538,6 +618,8 @@ MonoBehaviour:
   raycastDistance: 1000
   separationDistance: 0.2
   separationDuration: 0.15
+  orbitFocusAnchor: {fileID: 286169587}
+  updateOrbitFocusDuringSeparation: 1
   showDebugGizmos: 1
   debugGizmoColor: {r: 0, g: 1, b: 1, a: 1}
 --- !u!114 &1570979119
@@ -703,6 +785,20 @@ MonoBehaviour:
   baseColor: {r: 1, g: 0.82, b: 0.68, a: 1}
   ambientStrength: 0.15
   diffuseStrength: 1
+  receiveMainLightShadowStrength: 1
+  sdfSoftShadowStrength: 0.85
+  sdfSoftShadowSharpness: 16
+  sdfSoftShadowSteps: 24
+  sdfSoftShadowStart: 0.01
+  sdfSoftShadowDistance: 1.5
+  sdfSoftShadowNormalBias: 0.005
+  cutFaceColor: {r: 0.97, g: 0.43, b: 0.31, a: 1}
+  cutFaceBlend: 0.85
+  cutFaceOcclusionStrength: 0.45
+  cutFaceOcclusionDistance: 0.2
+  cutFaceBandSoftness: 0.01
+  cutFaceEdgeWidth: 0.04
+  cutFaceEdgeBoost: 0.35
   syncEveryFrame: 1
 --- !u!114 &1680505284
 MonoBehaviour:
@@ -746,3 +842,4 @@ SceneRoots:
   - {fileID: 91931938}
   - {fileID: 1680505282}
   - {fileID: 1570979120}
+  - {fileID: 286169588}

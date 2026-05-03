@@ -17,6 +17,10 @@ public class SdfSliceManager : MonoBehaviour
     [SerializeField] [Min(0.0f)] private float separationDistance = 0.2f;
     [SerializeField] [Min(0.01f)] private float separationDuration = 0.15f;
 
+    [Header("Orbit Focus")]
+    [SerializeField] private OrbitFocusAnchor orbitFocusAnchor;
+    [SerializeField] private bool updateOrbitFocusDuringSeparation = true;
+
     [Header("Debug")]
     [SerializeField] private bool showDebugGizmos = true;
     [SerializeField] private Color debugGizmoColor = Color.cyan;
@@ -86,6 +90,9 @@ public class SdfSliceManager : MonoBehaviour
 
             if (target.TrySplit(slicePlane, out SdfSliceablePiece positivePiece, out SdfSliceablePiece negativePiece))
             {
+                UpdateOrbitFocus(positivePiece != null ? positivePiece.transform : null,
+                    negativePiece != null ? negativePiece.transform : null);
+
                 StartCoroutine(AnimateSeparatedPair(
                     positivePiece != null ? positivePiece.transform : null,
                     negativePiece != null ? negativePiece.transform : null,
@@ -173,6 +180,11 @@ public class SdfSliceManager : MonoBehaviour
             positive.position = Vector3.Lerp(startPosA, targetPosA, eased);
             negative.position = Vector3.Lerp(startPosB, targetPosB, eased);
 
+            if (updateOrbitFocusDuringSeparation)
+            {
+                UpdateOrbitFocus(positive, negative);
+            }
+
             elapsed += Time.deltaTime;
             yield return null;
         }
@@ -186,6 +198,18 @@ public class SdfSliceManager : MonoBehaviour
         {
             negative.position = targetPosB;
         }
+
+        UpdateOrbitFocus(positive, negative);
+    }
+
+    private void UpdateOrbitFocus(Transform positive, Transform negative)
+    {
+        if (orbitFocusAnchor == null)
+        {
+            return;
+        }
+
+        orbitFocusAnchor.SetFromTransforms(positive, negative);
     }
 
     private void OnDrawGizmos()
