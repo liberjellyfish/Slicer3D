@@ -99,6 +99,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float edgeMask;
                 float cutOcclusion;
                 float3 cutNormalOS;
+                float dominantPlaneDistance;
             };
 
             CBUFFER_START(UnityPerMaterial)
@@ -217,9 +218,11 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 surfaceData.edgeMask = 0.0;
                 surfaceData.cutOcclusion = 1.0;
                 surfaceData.cutNormalOS = float3(0.0, 1.0, 0.0);
+                surfaceData.dominantPlaneDistance = 1e20;
 
                 float dominantHalfSpace = -1e20;
                 float3 dominantNormalOS = float3(0.0, 1.0, 0.0);
+                float dominantPlaneDistance = 1e20;
 
                 [loop]
                 for (int i = 0; i < _CutPlaneCount; i++)
@@ -231,6 +234,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     {
                         dominantHalfSpace = halfSpaceSdf;
                         dominantNormalOS = normalize(-_CutPlanes[i].normal * _CutPlanes[i].sideSign);
+                        dominantPlaneDistance = planeSdf;
                     }
                 }
 
@@ -244,9 +248,11 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 }
 
                 float bandSoftness = max(_CutFaceBandSoftness, _HitEpsilon);
-                float cutDominance = dominantHalfSpace - surfaceData.baseDistance;
-                surfaceData.cutMask = smoothstep(-bandSoftness, bandSoftness, cutDominance);
+                float planeProximityMask = 1.0 - smoothstep(0.0, bandSoftness, abs(dominantPlaneDistance));
+                float interiorMask = saturate((-surfaceData.baseDistance) / bandSoftness);
+                surfaceData.cutMask = planeProximityMask * interiorMask;
                 surfaceData.cutNormalOS = dominantNormalOS;
+                surfaceData.dominantPlaneDistance = dominantPlaneDistance;
 
                 float edgeWidth = max(_CutFaceEdgeWidth, _HitEpsilon);
                 surfaceData.edgeMask = 1.0 - smoothstep(0.0, edgeWidth, abs(surfaceData.baseDistance));
@@ -362,7 +368,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return ambient + diffuse + edgeAccent;
             }
 
-            half4 frag(Varyings input) : SV_Target
+            half4 frag(Varyings input, out float outDepth : SV_Depth) : SV_Target
             {
                 float3 rayOriginWS = GetCameraPositionWS();
                 float3 rayDirWS = normalize(input.positionWS - rayOriginWS);
@@ -414,6 +420,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float3 normalOS = normalize(lerp(estimatedNormalOS, surfaceData.cutNormalOS, surfaceData.cutMask));
                 float3 hitPositionWS = TransformObjectToWorld(hitPositionOS);
                 float3 normalWS = normalize(TransformObjectToWorldNormal(normalOS));
+                outDepth = ComputeNormalizedDeviceCoordinatesWithZ(hitPositionWS, GetWorldToHClipMatrix()).z;
 
                 float3 finalColor = EvaluateLighting(hitPositionOS, hitPositionWS, normalOS, normalWS, surfaceData);
                 return half4(finalColor, 1.0);
