@@ -17,9 +17,10 @@ public class SdfPhase1Driver : MonoBehaviour
         Lighting = 0,
         WorldNormal = 1,
         CutMask = 2,
-        MainLightShadow = 3,
-        SdfSoftShadow = 4,
-        TotalShadow = 5
+        CutDominance = 3,
+        MainLightShadow = 4,
+        SdfSoftShadow = 5,
+        TotalShadow = 6
     }
 
     [Header("Shape")]
@@ -56,11 +57,13 @@ public class SdfPhase1Driver : MonoBehaviour
     [Header("Cut Surface")]
     [SerializeField] private Color cutFaceColor = new Color(0.97f, 0.43f, 0.31f, 1.0f);
     [SerializeField] [Range(0.0f, 1.0f)] private float cutFaceBlend = 0.85f;
+    [SerializeField] [Min(0.0005f)] private float cutFaceDominanceSoftness = 0.01f;
     [SerializeField] [Range(0.0f, 1.0f)] private float cutFaceOcclusionStrength = 0.45f;
     [SerializeField] [Min(0.01f)] private float cutFaceOcclusionDistance = 0.2f;
     [SerializeField] [Min(0.0005f)] private float cutFaceBandSoftness = 0.01f;
     [SerializeField] [Min(0.0005f)] private float cutFaceEdgeWidth = 0.04f;
     [SerializeField] [Range(0.0f, 2.0f)] private float cutFaceEdgeBoost = 0.35f;
+    [SerializeField] [Range(0.0f, 2.0f)] private float cutFaceFreshnessBoost = 0.3f;
 
     [Header("Debug")]
     [SerializeField] private DebugViewMode debugView = DebugViewMode.Lighting;
@@ -83,11 +86,13 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int SdfSoftShadowDistanceFadeStartId = Shader.PropertyToID("_SdfSoftShadowDistanceFadeStart");
     private static readonly int CutFaceColorId = Shader.PropertyToID("_CutFaceColor");
     private static readonly int CutFaceBlendId = Shader.PropertyToID("_CutFaceBlend");
+    private static readonly int CutFaceDominanceSoftnessId = Shader.PropertyToID("_CutFaceDominanceSoftness");
     private static readonly int CutFaceOcclusionStrengthId = Shader.PropertyToID("_CutFaceOcclusionStrength");
     private static readonly int CutFaceOcclusionDistanceId = Shader.PropertyToID("_CutFaceOcclusionDistance");
     private static readonly int CutFaceBandSoftnessId = Shader.PropertyToID("_CutFaceBandSoftness");
     private static readonly int CutFaceEdgeWidthId = Shader.PropertyToID("_CutFaceEdgeWidth");
     private static readonly int CutFaceEdgeBoostId = Shader.PropertyToID("_CutFaceEdgeBoost");
+    private static readonly int CutFaceFreshnessBoostId = Shader.PropertyToID("_CutFaceFreshnessBoost");
     private static readonly int MaxStepsId = Shader.PropertyToID("_MaxSteps");
     private static readonly int MaxDistanceId = Shader.PropertyToID("_MaxDistance");
     private static readonly int HitEpsilonId = Shader.PropertyToID("_HitEpsilon");
@@ -181,11 +186,13 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(SdfSoftShadowDistanceFadeStartId, sdfSoftShadowDistanceFadeStart);
         propertyBlock.SetColor(CutFaceColorId, cutFaceColor);
         propertyBlock.SetFloat(CutFaceBlendId, cutFaceBlend);
+        propertyBlock.SetFloat(CutFaceDominanceSoftnessId, cutFaceDominanceSoftness);
         propertyBlock.SetFloat(CutFaceOcclusionStrengthId, cutFaceOcclusionStrength);
         propertyBlock.SetFloat(CutFaceOcclusionDistanceId, cutFaceOcclusionDistance);
         propertyBlock.SetFloat(CutFaceBandSoftnessId, cutFaceBandSoftness);
         propertyBlock.SetFloat(CutFaceEdgeWidthId, cutFaceEdgeWidth);
         propertyBlock.SetFloat(CutFaceEdgeBoostId, cutFaceEdgeBoost);
+        propertyBlock.SetFloat(CutFaceFreshnessBoostId, cutFaceFreshnessBoost);
         propertyBlock.SetFloat(DebugViewId, (float)debugView);
         propertyBlock.SetFloat(MaxStepsId, maxSteps);
         propertyBlock.SetFloat(MaxDistanceId, maxDistance);

@@ -22,11 +22,13 @@ Shader "Custom/Sdf/Phase1Raymarch"
         [Header(Cut Surface)]
         _CutFaceColor ("Cut Face Color", Color) = (0.97, 0.43, 0.31, 1.0)
         _CutFaceBlend ("Cut Face Blend", Range(0.0, 1.0)) = 0.85
+        _CutFaceDominanceSoftness ("Cut Face Dominance Softness", Float) = 0.01
         _CutFaceOcclusionStrength ("Cut Face Occlusion Strength", Range(0.0, 1.0)) = 0.45
         _CutFaceOcclusionDistance ("Cut Face Occlusion Distance", Float) = 0.2
         _CutFaceBandSoftness ("Cut Face Band Softness", Float) = 0.01
         _CutFaceEdgeWidth ("Cut Face Edge Width", Float) = 0.04
         _CutFaceEdgeBoost ("Cut Face Edge Boost", Range(0.0, 2.0)) = 0.35
+        _CutFaceFreshnessBoost ("Cut Face Freshness Boost", Range(0.0, 2.0)) = 0.3
 
         [Header(Ray Marching)]
         _MaxSteps ("Max Steps", Range(8, 256)) = 96
@@ -47,7 +49,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
         [HideInInspector] _ProxyBoundsMax ("Proxy Bounds Max", Vector) = (0.5, 0.5, 0.5, 0.0)
 
         [Header(Debug)]
-        _DebugView ("Debug View", Range(0, 5)) = 0
+        _DebugView ("Debug View", Range(0, 6)) = 0
     }
 
     SubShader
@@ -102,10 +104,13 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float baseDistance;
                 float finalDistance;
                 float cutMask;
+                float cutDominanceMask;
                 float edgeMask;
                 float cutOcclusion;
+                float cutInteriorDepth;
                 float3 cutNormalOS;
                 float dominantPlaneDistance;
+                float dominantHalfSpace;
             };
 
             struct SdfShadowTerms
@@ -131,11 +136,13 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float _SdfSoftShadowDistanceFadeStart;
                 float4 _CutFaceColor;
                 float _CutFaceBlend;
+                float _CutFaceDominanceSoftness;
                 float _CutFaceOcclusionStrength;
                 float _CutFaceOcclusionDistance;
                 float _CutFaceBandSoftness;
                 float _CutFaceEdgeWidth;
                 float _CutFaceEdgeBoost;
+                float _CutFaceFreshnessBoost;
                 float _MaxSteps;
                 float _MaxDistance;
                 float _HitEpsilon;
@@ -232,10 +239,13 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 surfaceData.baseDistance = BaseShapeMap(p);
                 surfaceData.finalDistance = surfaceData.baseDistance;
                 surfaceData.cutMask = 0.0;
+                surfaceData.cutDominanceMask = 0.0;
                 surfaceData.edgeMask = 0.0;
                 surfaceData.cutOcclusion = 1.0;
+                surfaceData.cutInteriorDepth = 0.0;
                 surfaceData.cutNormalOS = float3(0.0, 1.0, 0.0);
                 surfaceData.dominantPlaneDistance = 1e20;
+                surfaceData.dominantHalfSpace = -1e20;
 
                 float dominantHalfSpace = -1e20;
                 float3 dominantNormalOS = float3(0.0, 1.0, 0.0);
@@ -258,6 +268,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 surfaceData.finalDistance = _CutPlaneCount > 0
                     ? max(surfaceData.baseDistance, dominantHalfSpace)
                     : surfaceData.baseDistance;
+                surfaceData.dominantHalfSpace = dominantHalfSpace;
 
                 if (_CutPlaneCount <= 0)
                 {
@@ -267,16 +278,23 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float bandSoftness = max(_CutFaceBandSoftness, _HitEpsilon);
                 float planeProximityMask = 1.0 - smoothstep(0.0, bandSoftness, abs(dominantPlaneDistance));
                 float interiorMask = saturate((-surfaceData.baseDistance) / bandSoftness);
-                surfaceData.cutMask = planeProximityMask * interiorMask;
+                float dominanceSoftness = max(_CutFaceDominanceSoftness, _HitEpsilon);
+                float dominanceDelta = dominantHalfSpace - surfaceData.baseDistance;
+                float cutDominanceMask = smoothstep(0.0, dominanceSoftness, dominanceDelta);
+                surfaceData.cutDominanceMask = cutDominanceMask;
+                surfaceData.cutMask = planeProximityMask * interiorMask * cutDominanceMask;
                 surfaceData.cutNormalOS = dominantNormalOS;
                 surfaceData.dominantPlaneDistance = dominantPlaneDistance;
 
                 float edgeWidth = max(_CutFaceEdgeWidth, _HitEpsilon);
-                surfaceData.edgeMask = 1.0 - smoothstep(0.0, edgeWidth, abs(surfaceData.baseDistance));
+                float shellEdgeMask = 1.0 - smoothstep(0.0, edgeWidth, abs(surfaceData.baseDistance));
+                surfaceData.edgeMask = shellEdgeMask * surfaceData.cutMask;
 
                 float aoDistance = max(_CutFaceOcclusionDistance, edgeWidth);
                 float interiorDepth = saturate((-surfaceData.baseDistance) / aoDistance);
-                surfaceData.cutOcclusion = 1.0 - interiorDepth * _CutFaceOcclusionStrength;
+                surfaceData.cutInteriorDepth = interiorDepth;
+                float occlusionMask = saturate(0.3 + interiorDepth * 0.7);
+                surfaceData.cutOcclusion = 1.0 - surfaceData.cutMask * occlusionMask * _CutFaceOcclusionStrength;
 
                 return surfaceData;
             }
@@ -392,7 +410,17 @@ Shader "Custom/Sdf/Phase1Raymarch"
             {
                 float3 baseColor = _BaseColor.rgb;
                 float3 cutColor = lerp(baseColor, _CutFaceColor.rgb, saturate(_CutFaceBlend));
-                return lerp(baseColor, cutColor, saturate(surfaceData.cutMask));
+                float freshnessBoost = 1.0 + surfaceData.cutInteriorDepth * _CutFaceFreshnessBoost;
+                float3 freshCutColor = saturate(cutColor * freshnessBoost);
+                float edgeBlend = saturate(surfaceData.edgeMask * 0.75);
+                freshCutColor = lerp(freshCutColor, min(freshCutColor + 0.15, 1.0), edgeBlend);
+                return lerp(baseColor, freshCutColor, saturate(surfaceData.cutMask));
+            }
+
+            float3 ResolveSurfaceNormalOS(float3 estimatedNormalOS, SdfSurfaceData surfaceData)
+            {
+                float cutNormalBlend = saturate(max(surfaceData.cutMask, surfaceData.cutDominanceMask * 0.85));
+                return normalize(lerp(estimatedNormalOS, surfaceData.cutNormalOS, cutNormalBlend));
             }
 
             float3 EvaluateLighting(
@@ -418,7 +446,9 @@ Shader "Custom/Sdf/Phase1Raymarch"
 
                 float3 ambient = surfaceColor * _AmbientStrength * cutOcclusion;
                 float3 diffuse = surfaceColor * mainLight.color * (ndotl * _DiffuseStrength * shadowTerms.totalShadow) * cutOcclusion;
-                float3 edgeAccent = cutMask * surfaceData.edgeMask * _CutFaceEdgeBoost * mainLight.color * shadowTerms.totalShadow;
+                float3 edgeAccentColor = lerp(_CutFaceColor.rgb, mainLight.color, 0.5);
+                float edgeLight = lerp(0.35, 1.0, shadowTerms.totalShadow);
+                float3 edgeAccent = surfaceData.edgeMask * _CutFaceEdgeBoost * edgeAccentColor * edgeLight;
 
                 return ambient + diffuse + edgeAccent;
             }
@@ -439,15 +469,20 @@ Shader "Custom/Sdf/Phase1Raymarch"
 
                 if (debugView == 3)
                 {
-                    return saturate(shadowTerms.mainLightShadow).xxx;
+                    return saturate(surfaceData.cutDominanceMask).xxx;
                 }
 
                 if (debugView == 4)
                 {
-                    return saturate(shadowTerms.sdfSoftShadow).xxx;
+                    return saturate(shadowTerms.mainLightShadow).xxx;
                 }
 
                 if (debugView == 5)
+                {
+                    return saturate(shadowTerms.sdfSoftShadow).xxx;
+                }
+
+                if (debugView == 6)
                 {
                     return saturate(shadowTerms.totalShadow).xxx;
                 }
@@ -504,7 +539,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
 
                 SdfSurfaceData surfaceData = EvaluateSurfaceData(hitPositionOS);
                 float3 estimatedNormalOS = EstimateNormalOS(hitPositionOS);
-                float3 normalOS = normalize(lerp(estimatedNormalOS, surfaceData.cutNormalOS, surfaceData.cutMask));
+                float3 normalOS = ResolveSurfaceNormalOS(estimatedNormalOS, surfaceData);
                 float3 hitPositionWS = TransformObjectToWorld(hitPositionOS);
                 float3 normalWS = normalize(TransformObjectToWorldNormal(normalOS));
                 outDepth = ComputeNormalizedDeviceCoordinatesWithZ(hitPositionWS, GetWorldToHClipMatrix()).z;
