@@ -15,6 +15,9 @@ Shader "Custom/Sdf/Phase1Raymarch"
         _SdfSoftShadowStart ("SDF Soft Shadow Start", Float) = 0.01
         _SdfSoftShadowDistance ("SDF Soft Shadow Distance", Float) = 1.5
         _SdfSoftShadowNormalBias ("SDF Soft Shadow Normal Bias", Float) = 0.005
+        _SdfSoftShadowMinStepScale ("SDF Soft Shadow Min Step Scale", Range(0.25, 4.0)) = 1.0
+        _SdfSoftShadowMaxStepFraction ("SDF Soft Shadow Max Step Fraction", Range(0.02, 0.5)) = 0.2
+        _SdfSoftShadowDistanceFadeStart ("SDF Soft Shadow Distance Fade Start", Range(0.0, 1.0)) = 0.7
 
         [Header(Cut Surface)]
         _CutFaceColor ("Cut Face Color", Color) = (0.97, 0.43, 0.31, 1.0)
@@ -42,6 +45,9 @@ Shader "Custom/Sdf/Phase1Raymarch"
         [HideInInspector] _CutPlaneCount ("Cut Plane Count", Int) = 0
         [HideInInspector] _ProxyBoundsMin ("Proxy Bounds Min", Vector) = (-0.5, -0.5, -0.5, 0.0)
         [HideInInspector] _ProxyBoundsMax ("Proxy Bounds Max", Vector) = (0.5, 0.5, 0.5, 0.0)
+
+        [Header(Debug)]
+        _DebugView ("Debug View", Range(0, 5)) = 0
     }
 
     SubShader
@@ -102,6 +108,13 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float dominantPlaneDistance;
             };
 
+            struct SdfShadowTerms
+            {
+                float mainLightShadow;
+                float sdfSoftShadow;
+                float totalShadow;
+            };
+
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseColor;
                 float _AmbientStrength;
@@ -113,6 +126,9 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float _SdfSoftShadowStart;
                 float _SdfSoftShadowDistance;
                 float _SdfSoftShadowNormalBias;
+                float _SdfSoftShadowMinStepScale;
+                float _SdfSoftShadowMaxStepFraction;
+                float _SdfSoftShadowDistanceFadeStart;
                 float4 _CutFaceColor;
                 float _CutFaceBlend;
                 float _CutFaceOcclusionStrength;
@@ -133,6 +149,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 int _CutPlaneCount;
                 float4 _ProxyBoundsMin;
                 float4 _ProxyBoundsMax;
+                float _DebugView;
             CBUFFER_END
 
             StructuredBuffer<CutPlaneData> _CutPlanes;
@@ -296,6 +313,11 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return tExit >= max(tEnter, 0.0);
             }
 
+            float GetSoftShadowMinStep()
+            {
+                return max(_HitEpsilon * max(_SdfSoftShadowMinStepScale, 0.25), 0.0005);
+            }
+
             float SampleSdfSoftShadow(float3 rayOriginOS, float3 rayDirOS, float maxDistance)
             {
                 if (_SdfSoftShadowStrength <= 0.0 || _SdfSoftShadowSteps < 1.0 || maxDistance <= 0.0)
@@ -303,11 +325,12 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     return 1.0;
                 }
 
-                float minStep = max(_HitEpsilon * 0.5, 0.001);
-                float maxStep = max(minStep, maxDistance * 0.25);
+                float minStep = GetSoftShadowMinStep();
+                float maxStep = max(minStep, maxDistance * saturate(_SdfSoftShadowMaxStepFraction));
                 float softness = max(_SdfSoftShadowSharpness, 1.0);
                 float shadow = 1.0;
-                float t = max(_SdfSoftShadowStart, _HitEpsilon * 2.0);
+                float previousH = 1e20;
+                float t = max(_SdfSoftShadowStart, minStep);
 
                 [loop]
                 for (int stepIndex = 0; stepIndex < (int)_SdfSoftShadowSteps; stepIndex++)
@@ -323,11 +346,53 @@ Shader "Custom/Sdf/Phase1Raymarch"
                         return 0.0;
                     }
 
-                    shadow = min(shadow, softness * h / max(t, 1e-4));
-                    t += clamp(h, minStep, maxStep);
+                    float y = h * h / max(2.0 * previousH, 1e-4);
+                    float d = sqrt(max(h * h - y * y, 0.0));
+                    shadow = min(shadow, softness * d / max(t - y, 1e-4));
+
+                    previousH = h;
+                    float adaptiveStep = clamp(max(h, y), minStep, maxStep);
+                    t += adaptiveStep;
+                }
+
+                float fadeStart = saturate(_SdfSoftShadowDistanceFadeStart);
+                if (fadeStart < 1.0)
+                {
+                    float travel01 = saturate(t / max(maxDistance, 1e-4));
+                    float fadeToLight = smoothstep(fadeStart, 1.0, travel01);
+                    shadow = lerp(shadow, 1.0, fadeToLight);
                 }
 
                 return saturate(shadow);
+            }
+
+            SdfShadowTerms EvaluateShadowTerms(
+                float3 hitPositionOS,
+                float3 normalOS,
+                float3 lightDirWS,
+                float mainLightShadow)
+            {
+                SdfShadowTerms shadowTerms;
+                shadowTerms.mainLightShadow = mainLightShadow;
+
+                float shadowDistance = max(_SdfSoftShadowDistance, 0.0);
+                float3 lightDirOS = normalize(TransformWorldToObjectDir(lightDirWS));
+                float bias = max(_SdfSoftShadowNormalBias, _HitEpsilon);
+                float sdfSoftShadow = SampleSdfSoftShadow(
+                    hitPositionOS + normalOS * bias,
+                    lightDirOS,
+                    shadowDistance);
+
+                shadowTerms.sdfSoftShadow = lerp(1.0, sdfSoftShadow, saturate(_SdfSoftShadowStrength));
+                shadowTerms.totalShadow = saturate(shadowTerms.mainLightShadow * shadowTerms.sdfSoftShadow);
+                return shadowTerms;
+            }
+
+            float3 ComposeSurfaceColor(SdfSurfaceData surfaceData)
+            {
+                float3 baseColor = _BaseColor.rgb;
+                float3 cutColor = lerp(baseColor, _CutFaceColor.rgb, saturate(_CutFaceBlend));
+                return lerp(baseColor, cutColor, saturate(surfaceData.cutMask));
             }
 
             float3 EvaluateLighting(
@@ -335,37 +400,59 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float3 hitPositionWS,
                 float3 normalOS,
                 float3 normalWS,
-                SdfSurfaceData surfaceData)
+                SdfSurfaceData surfaceData,
+                out SdfShadowTerms shadowTerms)
             {
                 float4 shadowCoord = TransformWorldToShadowCoord(hitPositionWS);
                 Light mainLight = GetMainLight(shadowCoord);
 
                 float3 lightDirWS = normalize(mainLight.direction);
-                float3 lightDirOS = normalize(TransformWorldToObjectDir(lightDirWS));
                 float ndotl = saturate(dot(normalWS, lightDirWS));
 
                 float mainLightShadow = lerp(1.0, mainLight.shadowAttenuation, saturate(_ReceiveMainLightShadowStrength));
-
-                float shadowDistance = max(_SdfSoftShadowDistance, 0.0);
-                float sdfSoftShadow = SampleSdfSoftShadow(
-                    hitPositionOS + normalOS * _SdfSoftShadowNormalBias,
-                    lightDirOS,
-                    shadowDistance);
-                sdfSoftShadow = lerp(1.0, sdfSoftShadow, saturate(_SdfSoftShadowStrength));
-
-                float totalShadow = saturate(mainLightShadow * sdfSoftShadow);
+                shadowTerms = EvaluateShadowTerms(hitPositionOS, normalOS, lightDirWS, mainLightShadow);
                 float cutMask = saturate(surfaceData.cutMask);
                 float cutOcclusion = lerp(1.0, surfaceData.cutOcclusion, cutMask);
 
-                float3 baseColor = _BaseColor.rgb;
-                float3 cutColor = lerp(baseColor, _CutFaceColor.rgb, saturate(_CutFaceBlend));
-                float3 surfaceColor = lerp(baseColor, cutColor, cutMask);
+                float3 surfaceColor = ComposeSurfaceColor(surfaceData);
 
                 float3 ambient = surfaceColor * _AmbientStrength * cutOcclusion;
-                float3 diffuse = surfaceColor * mainLight.color * (ndotl * _DiffuseStrength * totalShadow) * cutOcclusion;
-                float3 edgeAccent = cutMask * surfaceData.edgeMask * _CutFaceEdgeBoost * mainLight.color * totalShadow;
+                float3 diffuse = surfaceColor * mainLight.color * (ndotl * _DiffuseStrength * shadowTerms.totalShadow) * cutOcclusion;
+                float3 edgeAccent = cutMask * surfaceData.edgeMask * _CutFaceEdgeBoost * mainLight.color * shadowTerms.totalShadow;
 
                 return ambient + diffuse + edgeAccent;
+            }
+
+            float3 EvaluateDebugView(SdfSurfaceData surfaceData, float3 normalWS, SdfShadowTerms shadowTerms)
+            {
+                int debugView = (int)round(_DebugView);
+
+                if (debugView == 1)
+                {
+                    return normalWS * 0.5 + 0.5;
+                }
+
+                if (debugView == 2)
+                {
+                    return saturate(surfaceData.cutMask).xxx;
+                }
+
+                if (debugView == 3)
+                {
+                    return saturate(shadowTerms.mainLightShadow).xxx;
+                }
+
+                if (debugView == 4)
+                {
+                    return saturate(shadowTerms.sdfSoftShadow).xxx;
+                }
+
+                if (debugView == 5)
+                {
+                    return saturate(shadowTerms.totalShadow).xxx;
+                }
+
+                return 0.0;
             }
 
             half4 frag(Varyings input, out float outDepth : SV_Depth) : SV_Target
@@ -422,7 +509,13 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float3 normalWS = normalize(TransformObjectToWorldNormal(normalOS));
                 outDepth = ComputeNormalizedDeviceCoordinatesWithZ(hitPositionWS, GetWorldToHClipMatrix()).z;
 
-                float3 finalColor = EvaluateLighting(hitPositionOS, hitPositionWS, normalOS, normalWS, surfaceData);
+                SdfShadowTerms shadowTerms;
+                float3 finalColor = EvaluateLighting(hitPositionOS, hitPositionWS, normalOS, normalWS, surfaceData, shadowTerms);
+                if (_DebugView > 0.5)
+                {
+                    finalColor = EvaluateDebugView(surfaceData, normalWS, shadowTerms);
+                }
+
                 return half4(finalColor, 1.0);
             }
             ENDHLSL
