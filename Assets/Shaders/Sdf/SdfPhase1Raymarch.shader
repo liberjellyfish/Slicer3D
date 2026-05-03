@@ -67,6 +67,8 @@ Shader "Custom/Sdf/Phase1Raymarch"
             {
                 float3 normal;
                 float distance;
+                float sideSign;
+                float3 padding;
             };
 
             CBUFFER_START(UnityPerMaterial)
@@ -127,19 +129,31 @@ Shader "Custom/Sdf/Phase1Raymarch"
             {
                 float sphereDistance = SdSphere(p, _SphereCenter.xyz, _SphereRadius);
                 float clippedBoxDistance = SdClippedBox(p);
+                float d = sphereDistance;
 
                 int shapeMode = (int)round(_ShapeMode);
                 if (shapeMode == 0)
                 {
-                    return sphereDistance;
+                    d = sphereDistance;
                 }
-
-                if (shapeMode == 1)
+                else if (shapeMode == 1)
                 {
-                    return clippedBoxDistance;
+                    d = clippedBoxDistance;
+                }
+                else
+                {
+                    d = min(sphereDistance, clippedBoxDistance);
                 }
 
-                return min(sphereDistance, clippedBoxDistance);
+                [loop]
+                for (int i = 0; i < _CutPlaneCount; i++)
+                {
+                    float planeSdf = dot(p, _CutPlanes[i].normal) + _CutPlanes[i].distance;
+                    float halfSpaceSdf = -(planeSdf * _CutPlanes[i].sideSign);
+                    d = max(d, halfSpaceSdf);
+                }
+
+                return d;
             }
 
             float3 EstimateNormalOS(float3 p)

@@ -240,6 +240,328 @@ MonoBehaviour:
   m_LightCookieSize: {x: 1, y: 1}
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 0
+--- !u!1 &205214038
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 205214044}
+  - component: {fileID: 205214043}
+  - component: {fileID: 205214042}
+  - component: {fileID: 205214041}
+  - component: {fileID: 205214040}
+  - component: {fileID: 205214039}
+  m_Layer: 0
+  m_Name: NegativePiece
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &205214039
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 205214038}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1b7cc630c868f344dbdb89e44153fd3f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  debugPlanes:
+  - normal: {x: 1, y: 0, z: 0}
+    distance: 0
+    sideSign: -1
+    padding: {x: 0, y: 0, z: 0}
+  uploadDebugPlanesOnEnable: 1
+  drawPlaneGizmos: 1
+  previewDebugPlanesWhenNotUploaded: 0
+  gizmoSize: 1.5
+  gizmoColor: {r: 0.2, g: 0.9, b: 1, a: 0.85}
+  uploadedPlaneCount: 1
+  bufferCapacity: 1
+  hasUploadedPlanes: 1
+--- !u!114 &205214040
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 205214038}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c52e07e5e65b922418cc371488b160d0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  shapeMode: 0
+  sphereCenter: {x: 0, y: 0, z: 0}
+  sphereRadius: 0.33
+  boxExtents: {x: 0.28, y: 0.28, z: 0.28}
+  cutPlaneNormal: {x: 0.8, y: 0.2, z: 0}
+  cutPlaneOffset: 0
+  maxSteps: 96
+  maxDistance: 8
+  hitEpsilon: 0.001
+  normalEpsilon: 0.002
+  baseColor: {r: 1, g: 0.82, b: 0.68, a: 1}
+  ambientStrength: 0.15
+  diffuseStrength: 1
+  syncEveryFrame: 1
+--- !u!65 &205214041
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 205214038}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1, y: 1, z: 1}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!23 &205214042
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 205214038}
+  m_Enabled: 1
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 2100000, guid: 433d6f9f06a367d479c3e2469ec1023c, type: 2}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_AdditionalVertexStreams: {fileID: 0}
+--- !u!33 &205214043
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 205214038}
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!4 &205214044
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 205214038}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 4, y: 4, z: 4}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &559126795
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 559126801}
+  - component: {fileID: 559126800}
+  - component: {fileID: 559126799}
+  - component: {fileID: 559126798}
+  - component: {fileID: 559126797}
+  - component: {fileID: 559126796}
+  m_Layer: 0
+  m_Name: PositivePiece
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &559126796
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 559126795}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1b7cc630c868f344dbdb89e44153fd3f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  debugPlanes:
+  - normal: {x: 0, y: 1, z: 0}
+    distance: 0
+    sideSign: -1
+    padding: {x: 0, y: 0, z: 0}
+  uploadDebugPlanesOnEnable: 1
+  drawPlaneGizmos: 1
+  previewDebugPlanesWhenNotUploaded: 0
+  gizmoSize: 1.5
+  gizmoColor: {r: 0.2, g: 0.9, b: 1, a: 0.85}
+  uploadedPlaneCount: 1
+  bufferCapacity: 1
+  hasUploadedPlanes: 1
+--- !u!114 &559126797
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 559126795}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c52e07e5e65b922418cc371488b160d0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  shapeMode: 0
+  sphereCenter: {x: 0, y: 0, z: 0}
+  sphereRadius: 0.33
+  boxExtents: {x: 0.28, y: 0.28, z: 0.28}
+  cutPlaneNormal: {x: 0.8, y: 0.2, z: 0}
+  cutPlaneOffset: 0
+  maxSteps: 96
+  maxDistance: 8
+  hitEpsilon: 0.001
+  normalEpsilon: 0.002
+  baseColor: {r: 1, g: 0.82, b: 0.68, a: 1}
+  ambientStrength: 0.15
+  diffuseStrength: 1
+  syncEveryFrame: 1
+--- !u!65 &559126798
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 559126795}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1, y: 1, z: 1}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!23 &559126799
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 559126795}
+  m_Enabled: 1
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 2100000, guid: 433d6f9f06a367d479c3e2469ec1023c, type: 2}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_AdditionalVertexStreams: {fileID: 0}
+--- !u!33 &559126800
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 559126795}
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!4 &559126801
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 559126795}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 4, y: 4, z: 4}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1109503982
 GameObject:
   m_ObjectHideFlags: 0
@@ -397,7 +719,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!65 &1680505279
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -499,7 +821,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c52e07e5e65b922418cc371488b160d0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  shapeMode: 2
+  shapeMode: 0
   sphereCenter: {x: 0, y: 0, z: 0}
   sphereRadius: 0.33
   boxExtents: {x: 0.28, y: 0.28, z: 0.28}
@@ -525,19 +847,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1b7cc630c868f344dbdb89e44153fd3f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  debugPlanes:
-  - normal: {x: 1, y: 0, z: 0}
-    distance: 0
-  - normal: {x: 0, y: 1, z: 0}
-    distance: -0.3
+  debugPlanes: []
   uploadDebugPlanesOnEnable: 1
   drawPlaneGizmos: 1
   previewDebugPlanesWhenNotUploaded: 0
   gizmoSize: 1.5
   gizmoColor: {r: 0.2, g: 0.9, b: 1, a: 0.85}
-  uploadedPlaneCount: 2
-  bufferCapacity: 2
-  hasUploadedPlanes: 1
+  uploadedPlaneCount: 0
+  bufferCapacity: 0
+  hasUploadedPlanes: 0
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -545,3 +863,5 @@ SceneRoots:
   - {fileID: 1109503985}
   - {fileID: 91931938}
   - {fileID: 1680505282}
+  - {fileID: 559126801}
+  - {fileID: 205214044}

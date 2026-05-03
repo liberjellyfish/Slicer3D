@@ -113,7 +113,7 @@ public class SdfPhase1Driver : MonoBehaviour
             ? cutPlaneNormal.normalized
             : Vector3.up;
 
-        propertyBlock.Clear();
+        cachedRenderer.GetPropertyBlock(propertyBlock);
         propertyBlock.SetColor(BaseColorId, baseColor);
         propertyBlock.SetFloat(AmbientStrengthId, ambientStrength);
         propertyBlock.SetFloat(DiffuseStrengthId, diffuseStrength);

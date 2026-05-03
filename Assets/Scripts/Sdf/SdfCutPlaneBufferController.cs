@@ -37,7 +37,7 @@ public class SdfCutPlaneBufferController : MonoBehaviour
     private Renderer cachedRenderer;
     private ComputeBuffer cutPlaneBuffer;
     private NativeArray<CutPlaneData> uploadCache;
-    private Material[] cachedMaterials = Array.Empty<Material>();
+    private MaterialPropertyBlock propertyBlock;
 
     public int UploadedPlaneCount => uploadedPlaneCount;
 
@@ -114,7 +114,7 @@ public class SdfCutPlaneBufferController : MonoBehaviour
         {
             for (int i = 0; i < count; i++)
             {
-                uploadCache[i] = new CutPlaneData(planes[i].normal, planes[i].distance);
+                uploadCache[i] = new CutPlaneData(planes[i].normal, planes[i].distance, planes[i].sideSign);
             }
 
             cutPlaneBuffer.SetData(uploadCache, 0, 0, count);
@@ -128,9 +128,9 @@ public class SdfCutPlaneBufferController : MonoBehaviour
     /// 这里会自动转成“当前对象的对象空间平面”。
     /// 后续鼠标划线切割可直接走这个入口。
     /// </summary>
-    public void AppendWorldPlane(Plane worldPlane)
+    public void AppendWorldPlane(Plane worldPlane, bool keepPositiveSide = true)
     {
-        CutPlaneData localPlane = CutPlaneData.FromWorldPlane(transform, worldPlane);
+        CutPlaneData localPlane = CutPlaneData.FromWorldPlane(transform, worldPlane, keepPositiveSide);
         AppendLocalPlane(localPlane);
     }
 
@@ -153,9 +153,9 @@ public class SdfCutPlaneBufferController : MonoBehaviour
             cachedRenderer = GetComponent<Renderer>();
         }
 
-        if (cachedRenderer != null)
+        if (propertyBlock == null)
         {
-            cachedMaterials = cachedRenderer.sharedMaterials;
+            propertyBlock = new MaterialPropertyBlock();
         }
     }
 
@@ -181,45 +181,32 @@ public class SdfCutPlaneBufferController : MonoBehaviour
     private void BindResources(int planeCount)
     {
         CacheComponents();
-        if (cachedMaterials == null || cachedMaterials.Length == 0)
+        if (cachedRenderer == null)
         {
             return;
         }
 
-        for (int i = 0; i < cachedMaterials.Length; i++)
+        cachedRenderer.GetPropertyBlock(propertyBlock);
+        propertyBlock.SetInt(CutPlaneCountName, planeCount);
+        if (cutPlaneBuffer != null)
         {
-            Material material = cachedMaterials[i];
-            if (material == null)
-            {
-                continue;
-            }
-
-            material.SetInt(CutPlaneCountName, planeCount);
-            if (cutPlaneBuffer != null)
-            {
-                material.SetBuffer(CutPlaneBufferName, cutPlaneBuffer);
-            }
+            propertyBlock.SetBuffer(CutPlaneBufferName, cutPlaneBuffer);
         }
+
+        cachedRenderer.SetPropertyBlock(propertyBlock);
     }
 
     private void BindPlaneCountOnly(int planeCount)
     {
         CacheComponents();
-        if (cachedMaterials == null || cachedMaterials.Length == 0)
+        if (cachedRenderer == null)
         {
             return;
         }
 
-        for (int i = 0; i < cachedMaterials.Length; i++)
-        {
-            Material material = cachedMaterials[i];
-            if (material == null)
-            {
-                continue;
-            }
-
-            material.SetInt(CutPlaneCountName, planeCount);
-        }
+        cachedRenderer.GetPropertyBlock(propertyBlock);
+        propertyBlock.SetInt(CutPlaneCountName, planeCount);
+        cachedRenderer.SetPropertyBlock(propertyBlock);
     }
 
     private void ReleaseGpuStorageOnly()
@@ -312,7 +299,7 @@ public class SdfCutPlaneBufferController : MonoBehaviour
         Vector3 w2 = localToWorld.MultiplyPoint3x4(p2);
         Vector3 w3 = localToWorld.MultiplyPoint3x4(p3);
         Vector3 centerWorld = localToWorld.MultiplyPoint3x4(localCenter);
-        Vector3 normalWorld = localToWorld.MultiplyVector(localNormal).normalized;
+        Vector3 normalWorld = localToWorld.MultiplyVector(localNormal).normalized * (plane.KeepsPositiveSide() ? 1.0f : -1.0f);
 
         Gizmos.DrawLine(w0, w1);
         Gizmos.DrawLine(w1, w2);
