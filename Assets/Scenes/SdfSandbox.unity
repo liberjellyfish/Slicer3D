@@ -228,8 +228,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Version: 3
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -251,8 +251,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6788262aca2311647a9379d7ccf42672, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   animateInPlayMode: 1
   rotateYaw: 1
   yawSpeed: 18
@@ -882,6 +882,7 @@ MonoBehaviour:
   dustVisualizationRoot: {fileID: 0}
   sdfDrivers:
   - {fileID: 1680505283}
+  sharedVolumeProxy: {fileID: 1917404106}
   validationCameras:
   - {fileID: 1109503984}
   validationMode: 9
@@ -900,7 +901,7 @@ MonoBehaviour:
   cookieEdgeSoftness: 0.72
   cookieCenterBias: 0.35
   cookieResolution: 128
-  showBackdropInValidationModes: 1
+  showBackdropInValidationModes: 0
   normalBackdropColor: {r: 0.28, g: 0.29, b: 0.32, a: 1}
   validationBackdropColor: {r: 0.12, g: 0.14, b: 0.18, a: 1}
   animateLightInValidationModes: 1
@@ -1048,8 +1049,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c52e07e5e65b922418cc371488b160d0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   shapeMode: 0
   sphereCenter: {x: 0, y: 0, z: 0}
   sphereRadius: 0.33
@@ -1148,6 +1149,193 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   remainingSplits: 2
+--- !u!1 &1917404101
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1917404104}
+  - component: {fileID: 1917404103}
+  - component: {fileID: 1917404102}
+  - component: {fileID: 1917404105}
+  - component: {fileID: 1917404106}
+  m_Layer: 6
+  m_Name: SdfSharedVolumeProxy
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!23 &1917404102
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1917404101}
+  m_Enabled: 1
+  m_CastShadows: 0
+  m_ReceiveShadows: 0
+  m_DynamicOccludee: 0
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 0
+  m_LightProbeUsage: 0
+  m_ReflectionProbeUsage: 0
+  m_RayTracingMode: 0
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 2100000, guid: 433d6f9f06a367d479c3e2469ec1023c, type: 2}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 100
+  m_AdditionalVertexStreams: {fileID: 0}
+--- !u!33 &1917404103
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1917404101}
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!4 &1917404104
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1917404101}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 4.8, y: 4.8, z: 4.8}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1917404105
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1917404101}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c52e07e5e65b922418cc371488b160d0, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  shapeMode: 0
+  sphereCenter: {x: 0, y: 0, z: 0}
+  sphereRadius: 0.33
+  boxExtents: {x: 0.28, y: 0.28, z: 0.28}
+  cutPlaneNormal: {x: 0.8, y: 0.2, z: 0}
+  cutPlaneOffset: 0
+  maxSteps: 96
+  maxDistance: 8
+  hitEpsilon: 0.001
+  normalEpsilon: 0.002
+  baseColor: {r: 1, g: 0.82, b: 0.68, a: 1}
+  ambientStrength: 0.15
+  diffuseStrength: 1
+  receiveMainLightShadowStrength: 1
+  sdfSoftShadowStrength: 0.85
+  sdfSoftShadowSharpness: 16
+  sdfSoftShadowSteps: 24
+  sdfSoftShadowStart: 0.01
+  sdfSoftShadowDistance: 1.5
+  sdfSoftShadowNormalBias: 0.005
+  sdfSoftShadowMinStepScale: 1
+  sdfSoftShadowMaxStepFraction: 0.2
+  sdfSoftShadowDistanceFadeStart: 0.7
+  cutFaceColor: {r: 0.97, g: 0.43, b: 0.31, a: 1}
+  cutFaceBlend: 0.85
+  cutFaceDominanceSoftness: 0.01
+  cutFaceOcclusionStrength: 0.45
+  cutFaceOcclusionDistance: 0.2
+  cutFaceBandSoftness: 0.01
+  cutFaceEdgeWidth: 0.04
+  cutFaceEdgeBoost: 0.35
+  cutFaceFreshnessBoost: 0.3
+  volumeLightEnabled: 1
+  volumeContributionMode: 3
+  volumeLightIntensity: 3
+  volumeLightDensity: 0.8
+  volumeLightAnisotropy: 0.15
+  volumeLightSamples: 12
+  volumeLightMaxDistance: 0.8
+  volumeLightMaxStepLength: 0.1
+  volumeLightShadowStrength: 0.75
+  volumeLightShadowBias: 0.01
+  volumeLightSurfaceFadeDistance: 0.22
+  volumeLightPlaneBand: 0.16
+  volumeLightRemovedDepth: 0.28
+  volumeLightShapeDepth: 0.24
+  volumeLightNoiseScale: 4
+  volumeLightNoiseStrength: 0.18
+  volumeLightNoiseDrift: 0.2
+  volumeBaseFogDensity: 0.003
+  volumeHeightFogStrength: 0.11
+  volumeCutFogBoost: 1.55
+  volumeNoiseContrast: 1.35
+  volumeShadowSamples: 18
+  volumeShadowMaxDistance: 2.1
+  volumePointLightEnabled: 1
+  volumePointLightPositionWS: {x: 1.4, y: 1.6, z: -2.2}
+  volumePointLightColor: {r: 1, g: 0.76, b: 0.48, a: 1}
+  volumePointLightIntensity: 18
+  volumePointLightRange: 6
+  volumeExposure: 1.25
+  volumeColorTint: {r: 1, g: 0.78, b: 0.54, a: 1}
+  debugView: 0
+  syncEveryFrame: 1
+--- !u!114 &1917404106
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1917404101}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a8c9f06d4f2b4c4aa0f927b71d5e9c32, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  autoFindSurfaceDrivers: 1
+  surfaceDrivers:
+  - {fileID: 1680505283}
+  autoFitBounds: 1
+  manualCenter: {x: 0, y: 0, z: 0}
+  manualSize: {x: 4.8, y: 4.8, z: 4.8}
+  boundsPadding: 0.35
+  minBoundsSize: 0.5
+  sortingOrder: 100
+  drawBoundsGizmo: 1
+  boundsGizmoColor: {r: 1, g: 0.62, b: 0.25, a: 0.35}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -1157,3 +1345,4 @@ SceneRoots:
   - {fileID: 1680505282}
   - {fileID: 1570979120}
   - {fileID: 286169588}
+  - {fileID: 1917404104}

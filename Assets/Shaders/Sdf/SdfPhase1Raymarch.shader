@@ -30,6 +30,10 @@ Shader "Custom/Sdf/Phase1Raymarch"
         _CutFaceEdgeBoost ("Cut Face Edge Boost", Range(0.0, 2.0)) = 0.35
         _CutFaceFreshnessBoost ("Cut Face Freshness Boost", Range(0.0, 2.0)) = 0.3
 
+        [Header(Render Mode)]
+        _SdfSurfaceContribution ("SDF Surface Contribution", Range(0.0, 1.0)) = 1.0
+        _UseSceneSdf ("Use Scene SDF", Range(0.0, 1.0)) = 0.0
+
         [Header(Volume Lighting)]
         _VolumeLightEnabled ("Volume Light Enabled", Range(0.0, 1.0)) = 0.0
         _VolumeSurfaceContribution ("Volume Surface Contribution", Range(0.0, 1.0)) = 1.0
@@ -171,6 +175,17 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float combinedVisibility;
             };
 
+            struct SdfSceneShapeData
+            {
+                float4 worldToObjectRow0;
+                float4 worldToObjectRow1;
+                float4 worldToObjectRow2;
+                float4 sphereCenterRadius;
+                float4 boxExtentsShapeMode;
+                float4 baseCutPlane;
+                float4 cutRangeAndDistanceScale;
+            };
+
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseColor;
                 float _AmbientStrength;
@@ -194,6 +209,8 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float _CutFaceEdgeWidth;
                 float _CutFaceEdgeBoost;
                 float _CutFaceFreshnessBoost;
+                float _SdfSurfaceContribution;
+                float _UseSceneSdf;
                 float _VolumeLightEnabled;
                 float _VolumeSurfaceContribution;
                 float _VolumeBackgroundContribution;
@@ -242,6 +259,9 @@ Shader "Custom/Sdf/Phase1Raymarch"
             CBUFFER_END
 
             StructuredBuffer<CutPlaneData> _CutPlanes;
+            StructuredBuffer<SdfSceneShapeData> _SdfSceneShapes;
+            StructuredBuffer<CutPlaneData> _SdfSceneCutPlanes;
+            int _SdfSceneShapeCount;
 
             Varyings vert(Attributes input)
             {
@@ -310,8 +330,92 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return d;
             }
 
+            float SdClippedBoxForData(float3 p, float3 extents, float3 planeNormal, float planeOffset)
+            {
+                float boxDistance = SdBox(p, extents);
+                float planeDistance = SdPlane(p, planeNormal, planeOffset);
+                return max(boxDistance, planeDistance);
+            }
+
+            float BaseShapeMapForData(float3 p, float3 sphereCenter, float sphereRadius, float3 boxExtents, float4 baseCutPlane, float shapeMode)
+            {
+                float sphereDistance = SdSphere(p, sphereCenter, sphereRadius);
+                float clippedBoxDistance = SdClippedBoxForData(p, boxExtents, baseCutPlane.xyz, baseCutPlane.w);
+                int mode = (int)round(shapeMode);
+
+                if (mode == 0)
+                {
+                    return sphereDistance;
+                }
+
+                if (mode == 1)
+                {
+                    return clippedBoxDistance;
+                }
+
+                return min(sphereDistance, clippedBoxDistance);
+            }
+
+            float ApplySceneCutPlanes(float3 p, float baseDistance, int cutStart, int cutCount)
+            {
+                float d = baseDistance;
+
+                [loop]
+                for (int i = 0; i < cutCount; i++)
+                {
+                    CutPlaneData cutPlane = _SdfSceneCutPlanes[cutStart + i];
+                    float planeSdf = dot(p, cutPlane.normal) + cutPlane.distance;
+                    float halfSpaceSdf = -(planeSdf * cutPlane.sideSign);
+                    d = max(d, halfSpaceSdf);
+                }
+
+                return d;
+            }
+
+            float SceneMap(float3 p)
+            {
+                if (_SdfSceneShapeCount <= 0)
+                {
+                    return BaseShapeMap(p);
+                }
+
+                float3 pWS = TransformObjectToWorld(p);
+                float d = 1e20;
+
+                [loop]
+                for (int i = 0; i < _SdfSceneShapeCount; i++)
+                {
+                    SdfSceneShapeData shape = _SdfSceneShapes[i];
+                    float4 pWS4 = float4(pWS, 1.0);
+                    float3 pShapeOS = float3(
+                        dot(shape.worldToObjectRow0, pWS4),
+                        dot(shape.worldToObjectRow1, pWS4),
+                        dot(shape.worldToObjectRow2, pWS4));
+                    float shapeDistance = BaseShapeMapForData(
+                        pShapeOS,
+                        shape.sphereCenterRadius.xyz,
+                        shape.sphereCenterRadius.w,
+                        shape.boxExtentsShapeMode.xyz,
+                        shape.baseCutPlane,
+                        shape.boxExtentsShapeMode.w);
+
+                    int cutStart = (int)round(shape.cutRangeAndDistanceScale.x);
+                    int cutCount = (int)round(shape.cutRangeAndDistanceScale.y);
+                    float distanceScale = max(shape.cutRangeAndDistanceScale.z, 1e-4);
+                    shapeDistance = ApplySceneCutPlanes(pShapeOS, shapeDistance, cutStart, cutCount) * distanceScale;
+                    d = min(d, shapeDistance);
+                }
+
+                return d;
+            }
+
             float Map(float3 p)
             {
+                if (_UseSceneSdf > 0.5)
+                {
+                    return SceneMap(p);
+                }
+
                 return ApplyCutPlanes(p, BaseShapeMap(p));
             }
 
@@ -1051,15 +1155,33 @@ Shader "Custom/Sdf/Phase1Raymarch"
 
                 if (hit)
                 {
-                    surfaceData = EvaluateSurfaceData(hitPositionOS);
-                    float3 estimatedNormalOS = EstimateNormalOS(hitPositionOS);
-                    float3 normalOS = ResolveSurfaceNormalOS(estimatedNormalOS, surfaceData);
-                    float3 hitPositionWS = TransformObjectToWorld(hitPositionOS);
-                    normalWS = normalize(TransformObjectToWorldNormal(normalOS));
-                    outDepth = ComputeNormalizedDeviceCoordinatesWithZ(hitPositionWS, GetWorldToHClipMatrix()).z;
+                    if (_SdfSurfaceContribution <= 0.5)
+                    {
+                        float volumeAlpha = saturate(1.0 - volumeTerms.transmittance);
+                        float scatteringLuminance = dot(volumeTerms.scattering, float3(0.2126, 0.7152, 0.0722));
+                        volumeAlpha = saturate(max(volumeAlpha, scatteringLuminance * 2.0));
 
-                    finalColor = EvaluateLighting(hitPositionOS, hitPositionWS, normalOS, normalWS, surfaceData, shadowTerms);
-                    finalColor = finalColor * volumeTerms.transmittance + volumeTerms.scattering;
+                        if (_DebugView <= 0.5 && volumeAlpha <= 0.003)
+                        {
+                            clip(-1.0);
+                        }
+
+                        outDepth = ComputeNormalizedDeviceCoordinatesWithZ(volumeDepthPositionWS, GetWorldToHClipMatrix()).z;
+                        finalColor = volumeAlpha > 1e-4 ? volumeTerms.scattering / volumeAlpha : float3(0.0, 0.0, 0.0);
+                        outputAlpha = volumeAlpha;
+                    }
+                    else
+                    {
+                        surfaceData = EvaluateSurfaceData(hitPositionOS);
+                        float3 estimatedNormalOS = EstimateNormalOS(hitPositionOS);
+                        float3 normalOS = ResolveSurfaceNormalOS(estimatedNormalOS, surfaceData);
+                        float3 hitPositionWS = TransformObjectToWorld(hitPositionOS);
+                        normalWS = normalize(TransformObjectToWorldNormal(normalOS));
+                        outDepth = ComputeNormalizedDeviceCoordinatesWithZ(hitPositionWS, GetWorldToHClipMatrix()).z;
+
+                        finalColor = EvaluateLighting(hitPositionOS, hitPositionWS, normalOS, normalWS, surfaceData, shadowTerms);
+                        finalColor = finalColor * volumeTerms.transmittance + volumeTerms.scattering;
+                    }
                 }
                 else
                 {

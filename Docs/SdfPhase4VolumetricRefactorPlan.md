@@ -109,16 +109,19 @@ visibility = lerp(1.0, visibility, VolumeLightShadowStrength);
 - 禁用明亮天空盒，切换为暗色 Camera background。
 - 驱动一个可旋转的虚拟点光，提升体积光束可读性。
 
-### H：切割后单背景体积
+### H：渲染架构整理
 
-切割会克隆 `SdfPhase1Driver`，如果每个子物体都渲染 no-hit 背景体积，就会产生多个 proxy volume box 叠加，表现为体积光束中出现莫名棱角和盒边。
+切割会克隆 `SdfPhase1Driver`。如果每个子物体都同时渲染表面和 no-hit 背景体积，就会产生多个 proxy volume box 叠加，表现为体积光束中出现莫名棱角和盒边。
 
-当前解决方案是“单背景体积 + 多表面体积”：
+当前解决方案升级为“表面 pass + 共享体积 pass”：
 
-- 只有一个 SDF driver 使用 `VolumeContributionMode.Full`，负责空射线上的背景体积。
-- 其他子物体使用 `VolumeContributionMode.SurfaceOnly`，只在命中自己表面时参与体积透射/散射。
-- `SdfValidationEnvironmentController` 会自动从当前所有 SDF drivers 中选择一个最靠近整体 bounds 中心的 background owner。
-- 这样既保留每个切片表面的体积合成，又避免多个体积盒互相叠加。
+- 每个切片子物体只负责自己的 SDF 表面，运行在 `VolumeContributionMode.SurfaceOnly`。
+- 场景里单独创建一个 `SdfSharedVolumeProxy`，运行在 `VolumeContributionMode.VolumeOnly`，只负责体积雾和体积光。
+- `SdfSharedVolumeProxy` 每帧收集所有普通 `SdfPhase1Driver`，把每个物体的 transform、基础形状参数和 cut plane range 打包到 `_SdfSceneShapes` / `_SdfSceneCutPlanes`。
+- shader 通过 `_UseSceneSdf` 区分本地 SDF 和场景 SDF：表面物体使用本地 `Map()`，共享体积盒使用聚合后的 `SceneMap()`。
+- 共享体积盒可以自动包围所有切片，也可以关闭 `Auto Fit Bounds` 后手动调节 `Manual Center` / `Manual Size`。
+
+这个结构让体积雾只被积分一次，同时体积阴影仍然读取所有切片的 SDF 数据。
 
 ## SdfSandbox 默认状态
 
@@ -128,7 +131,8 @@ visibility = lerp(1.0, visibility, VolumeLightShadowStrength);
 - `SdfSlicerSystem` 上的 `SdfValidationEnvironmentController` 默认 `Validation Mode = FinalLighting`。
 - `Use Dark Validation Sky` 已开启，用来避免原天空盒把体积盒染成蓝色。
 - `Volume Preset = CinematicWarm`，这是当前推荐的观察 preset。
-- `Enforce Single Volume Background` 已开启，切割后只保留一个背景体积盒。
+- `Show Backdrop In Validation Modes` 已关闭，验证背板默认不再遮挡体积光观察。
+- 场景中已有 `SdfSharedVolumeProxy`；如果引用丢失，进入 Play 或执行 `Apply Current Mode` 时会自动重新绑定/创建。
 
 ## Unity 验证顺序
 

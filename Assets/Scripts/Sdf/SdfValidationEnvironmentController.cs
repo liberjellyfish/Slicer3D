@@ -28,6 +28,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     [SerializeField] private Renderer backdropRenderer;
     [SerializeField] private GameObject dustVisualizationRoot;
     [SerializeField] private SdfPhase1Driver[] sdfDrivers = System.Array.Empty<SdfPhase1Driver>();
+    [SerializeField] private SdfSharedVolumeProxy sharedVolumeProxy;
     [SerializeField] private Camera[] validationCameras = System.Array.Empty<Camera>();
 
     [Header("Mode")]
@@ -51,7 +52,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     [SerializeField] [Min(16)] private int cookieResolution = 128;
 
     [Header("Backdrop")]
-    [SerializeField] private bool showBackdropInValidationModes = true;
+    [SerializeField] private bool showBackdropInValidationModes = false;
     [SerializeField] private Color normalBackdropColor = new Color(0.28f, 0.29f, 0.32f, 1.0f);
     [SerializeField] private Color validationBackdropColor = new Color(0.12f, 0.14f, 0.18f, 1.0f);
 
@@ -227,6 +228,9 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         }
 
         RefreshDrivers();
+        ResolveSharedVolumeProxy(allowSceneMutation);
+        RefreshDrivers();
+        SyncSharedVolumeProxySources();
         RefreshDustRoot();
         RefreshValidationCameras();
     }
@@ -425,6 +429,11 @@ public class SdfValidationEnvironmentController : MonoBehaviour
 
             sdfDrivers[i].ApplyVolumePreset(volumePreset);
         }
+
+        if (sharedVolumeProxy != null)
+        {
+            sharedVolumeProxy.ApplyVolumePreset(volumePreset);
+        }
     }
 
     [ContextMenu("Apply Volume Background Ownership")]
@@ -438,6 +447,27 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         RefreshDrivers();
         if (sdfDrivers == null || sdfDrivers.Length <= 0)
         {
+            return;
+        }
+
+        if (sharedVolumeProxy != null)
+        {
+            sharedVolumeProxy.SetSurfaceDrivers(sdfDrivers);
+            if (sharedVolumeProxy.VolumeDriver != null)
+            {
+                sharedVolumeProxy.VolumeDriver.SetVolumeContributionMode(SdfPhase1Driver.VolumeContributionMode.VolumeOnly);
+            }
+
+            for (int i = 0; i < sdfDrivers.Length; i++)
+            {
+                if (sdfDrivers[i] == null)
+                {
+                    continue;
+                }
+
+                sdfDrivers[i].SetVolumeContributionMode(nonOwnerVolumeContributionMode);
+            }
+
             return;
         }
 
@@ -507,6 +537,84 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         return bestDriver;
     }
 
+    private void ResolveSharedVolumeProxy(bool allowSceneMutation)
+    {
+        if (sharedVolumeProxy == null)
+        {
+            SdfSharedVolumeProxy[] foundProxies = Object.FindObjectsByType<SdfSharedVolumeProxy>(FindObjectsSortMode.None);
+            if (foundProxies.Length > 0)
+            {
+                sharedVolumeProxy = foundProxies[0];
+            }
+        }
+
+        if (sharedVolumeProxy != null || !allowSceneMutation)
+        {
+            return;
+        }
+
+        GameObject proxyObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        proxyObject.name = "SdfSharedVolumeProxy";
+        proxyObject.transform.SetParent(transform, false);
+
+        Collider generatedCollider = proxyObject.GetComponent<Collider>();
+        if (generatedCollider != null)
+        {
+            if (Application.isPlaying)
+            {
+                Destroy(generatedCollider);
+            }
+            else
+            {
+                DestroyImmediate(generatedCollider);
+            }
+        }
+
+        MeshRenderer proxyRenderer = proxyObject.GetComponent<MeshRenderer>();
+        Material sourceMaterial = GetFirstSdfMaterial();
+        if (proxyRenderer != null && sourceMaterial != null)
+        {
+            proxyRenderer.sharedMaterial = sourceMaterial;
+        }
+
+        SdfPhase1Driver proxyDriver = proxyObject.AddComponent<SdfPhase1Driver>();
+        proxyDriver.SetVolumeContributionMode(SdfPhase1Driver.VolumeContributionMode.VolumeOnly);
+        sharedVolumeProxy = proxyObject.AddComponent<SdfSharedVolumeProxy>();
+        sharedVolumeProxy.SetSurfaceDrivers(sdfDrivers);
+    }
+
+    private Material GetFirstSdfMaterial()
+    {
+        if (sdfDrivers == null)
+        {
+            return null;
+        }
+
+        for (int i = 0; i < sdfDrivers.Length; i++)
+        {
+            if (sdfDrivers[i] == null)
+            {
+                continue;
+            }
+
+            Material material = sdfDrivers[i].GetSharedMaterial();
+            if (material != null)
+            {
+                return material;
+            }
+        }
+
+        return null;
+    }
+
+    private void SyncSharedVolumeProxySources()
+    {
+        if (sharedVolumeProxy != null)
+        {
+            sharedVolumeProxy.SetSurfaceDrivers(sdfDrivers);
+        }
+    }
+
     private void UpdateVirtualPointLight()
     {
         RefreshDrivers();
@@ -516,6 +624,16 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         }
 
         Vector3 pointLightPosition = GetVirtualPointLightPosition();
+        if (sharedVolumeProxy != null && sharedVolumeProxy.VolumeDriver != null)
+        {
+            sharedVolumeProxy.VolumeDriver.SetVolumePointLight(
+                enableVirtualPointLight,
+                pointLightPosition,
+                virtualPointLightColor,
+                virtualPointLightIntensity,
+                virtualPointLightRange);
+        }
+
         for (int i = 0; i < sdfDrivers.Length; i++)
         {
             if (sdfDrivers[i] == null)
@@ -630,6 +748,11 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     private void ApplyDebugView(SdfPhase1Driver.DebugViewMode debugView)
     {
         RefreshDrivers();
+        if (sharedVolumeProxy != null && sharedVolumeProxy.VolumeDriver != null)
+        {
+            sharedVolumeProxy.VolumeDriver.SetDebugView(debugView);
+        }
+
         if (sdfDrivers == null || sdfDrivers.Length <= 0)
         {
             return;
@@ -659,6 +782,11 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         {
             if (foundDrivers[i] != null && foundDrivers[i].gameObject.scene.IsValid())
             {
+                if (foundDrivers[i].GetComponent<SdfSharedVolumeProxy>() != null)
+                {
+                    continue;
+                }
+
                 runtimeDrivers.Add(foundDrivers[i]);
             }
         }

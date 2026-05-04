@@ -41,7 +41,8 @@ public class SdfPhase1Driver : MonoBehaviour
     {
         Full = 0,
         SurfaceOnly = 1,
-        Disabled = 2
+        Disabled = 2,
+        VolumeOnly = 3
     }
 
     [Header("Shape")]
@@ -154,6 +155,8 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int CutFaceEdgeWidthId = Shader.PropertyToID("_CutFaceEdgeWidth");
     private static readonly int CutFaceEdgeBoostId = Shader.PropertyToID("_CutFaceEdgeBoost");
     private static readonly int CutFaceFreshnessBoostId = Shader.PropertyToID("_CutFaceFreshnessBoost");
+    private static readonly int SdfSurfaceContributionId = Shader.PropertyToID("_SdfSurfaceContribution");
+    private static readonly int UseSceneSdfId = Shader.PropertyToID("_UseSceneSdf");
     private static readonly int VolumeLightEnabledId = Shader.PropertyToID("_VolumeLightEnabled");
     private static readonly int VolumeSurfaceContributionId = Shader.PropertyToID("_VolumeSurfaceContribution");
     private static readonly int VolumeBackgroundContributionId = Shader.PropertyToID("_VolumeBackgroundContribution");
@@ -198,6 +201,7 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int ProxyBoundsMinId = Shader.PropertyToID("_ProxyBoundsMin");
     private static readonly int ProxyBoundsMaxId = Shader.PropertyToID("_ProxyBoundsMax");
     private static readonly int DebugViewId = Shader.PropertyToID("_DebugView");
+    private static readonly int SdfSceneShapeCountId = Shader.PropertyToID("_SdfSceneShapeCount");
 
     private Renderer cachedRenderer;
     private MeshFilter cachedMeshFilter;
@@ -267,6 +271,19 @@ public class SdfPhase1Driver : MonoBehaviour
         CacheComponents();
         return cachedRenderer != null ? cachedRenderer.bounds : new Bounds(transform.position, Vector3.zero);
     }
+
+    public Material GetSharedMaterial()
+    {
+        CacheComponents();
+        return cachedRenderer != null ? cachedRenderer.sharedMaterial : null;
+    }
+
+    public ShapeMode CurrentShapeMode => shapeMode;
+    public Vector3 SphereCenter => sphereCenter;
+    public float SphereRadius => sphereRadius;
+    public Vector3 BoxExtents => boxExtents;
+    public Vector3 BaseCutPlaneNormal => cutPlaneNormal.sqrMagnitude > 1e-6f ? cutPlaneNormal.normalized : Vector3.up;
+    public float BaseCutPlaneOffset => cutPlaneOffset;
 
     public void SetVolumePointLight(bool enabled, Vector3 positionWS, Color color, float intensity, float range)
     {
@@ -413,8 +430,11 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(CutFaceEdgeBoostId, cutFaceEdgeBoost);
         propertyBlock.SetFloat(CutFaceFreshnessBoostId, cutFaceFreshnessBoost);
         bool volumeEnabled = volumeLightEnabled && volumeContributionMode != VolumeContributionMode.Disabled;
-        float surfaceContribution = volumeEnabled ? 1.0f : 0.0f;
-        float backgroundContribution = volumeEnabled && volumeContributionMode == VolumeContributionMode.Full ? 1.0f : 0.0f;
+        float sdfSurfaceContribution = volumeContributionMode == VolumeContributionMode.VolumeOnly || volumeContributionMode == VolumeContributionMode.Disabled ? 0.0f : 1.0f;
+        float surfaceContribution = volumeEnabled && (volumeContributionMode == VolumeContributionMode.Full || volumeContributionMode == VolumeContributionMode.VolumeOnly) ? 1.0f : 0.0f;
+        float backgroundContribution = volumeEnabled && (volumeContributionMode == VolumeContributionMode.Full || volumeContributionMode == VolumeContributionMode.VolumeOnly) ? 1.0f : 0.0f;
+        propertyBlock.SetFloat(SdfSurfaceContributionId, sdfSurfaceContribution);
+        propertyBlock.SetFloat(UseSceneSdfId, 0.0f);
         propertyBlock.SetFloat(VolumeLightEnabledId, volumeEnabled ? 1.0f : 0.0f);
         propertyBlock.SetFloat(VolumeSurfaceContributionId, surfaceContribution);
         propertyBlock.SetFloat(VolumeBackgroundContributionId, backgroundContribution);
@@ -461,6 +481,7 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(CutPlaneOffsetId, cutPlaneOffset);
         propertyBlock.SetVector(ProxyBoundsMinId, meshBounds.min);
         propertyBlock.SetVector(ProxyBoundsMaxId, meshBounds.max);
+        propertyBlock.SetInt(SdfSceneShapeCountId, 0);
 
         cachedRenderer.SetPropertyBlock(propertyBlock);
     }
