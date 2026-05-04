@@ -900,6 +900,12 @@ MonoBehaviour:
   validationBackdropColor: {r: 0.12, g: 0.14, b: 0.18, a: 1}
   animateLightInValidationModes: 1
   pulseLightIntensityInVolumeMode: 0
+  enableRuntimeDebugHotkeys: 1
+  lightingDebugKey: 282
+  volumeDensityDebugKey: 283
+  volumeTransmittanceDebugKey: 284
+  volumeShadowDebugKey: 285
+  volumeCompositeDebugKey: 286
 --- !u!1 &1680505278
 GameObject:
   m_ObjectHideFlags: 0

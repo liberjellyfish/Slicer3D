@@ -46,6 +46,14 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     [SerializeField] private bool animateLightInValidationModes = true;
     [SerializeField] private bool pulseLightIntensityInVolumeMode = false;
 
+    [Header("Runtime Debug")]
+    [SerializeField] private bool enableRuntimeDebugHotkeys = true;
+    [SerializeField] private KeyCode lightingDebugKey = KeyCode.F1;
+    [SerializeField] private KeyCode volumeDensityDebugKey = KeyCode.F2;
+    [SerializeField] private KeyCode volumeTransmittanceDebugKey = KeyCode.F3;
+    [SerializeField] private KeyCode volumeShadowDebugKey = KeyCode.F4;
+    [SerializeField] private KeyCode volumeCompositeDebugKey = KeyCode.F5;
+
     private Texture2D generatedCookie;
     private Mesh generatedBackdropMesh;
     private LightShadows cachedShadowMode;
@@ -70,6 +78,16 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         {
             ApplyCurrentMode();
         }
+    }
+
+    private void Update()
+    {
+        if (!Application.isPlaying || !enableRuntimeDebugHotkeys)
+        {
+            return;
+        }
+
+        HandleRuntimeDebugHotkeys();
     }
 
     [ContextMenu("Apply Current Mode")]
@@ -228,12 +246,6 @@ public class SdfValidationEnvironmentController : MonoBehaviour
 
     private void ApplyDriverDebug(ValidationMode mode)
     {
-        RefreshDrivers();
-        if (sdfDrivers == null || sdfDrivers.Length <= 0)
-        {
-            return;
-        }
-
         SdfPhase1Driver.DebugViewMode debugView = SdfPhase1Driver.DebugViewMode.Lighting;
         switch (mode)
         {
@@ -246,6 +258,41 @@ public class SdfValidationEnvironmentController : MonoBehaviour
             case ValidationMode.Volume:
                 debugView = SdfPhase1Driver.DebugViewMode.VolumeLight;
                 break;
+        }
+
+        ApplyDebugView(debugView);
+    }
+
+    private void HandleRuntimeDebugHotkeys()
+    {
+        if (Input.GetKeyDown(lightingDebugKey))
+        {
+            ApplyDebugView(SdfPhase1Driver.DebugViewMode.Lighting);
+        }
+        else if (Input.GetKeyDown(volumeDensityDebugKey))
+        {
+            ApplyDebugView(SdfPhase1Driver.DebugViewMode.VolumeDensity);
+        }
+        else if (Input.GetKeyDown(volumeTransmittanceDebugKey))
+        {
+            ApplyDebugView(SdfPhase1Driver.DebugViewMode.VolumeTransmittance);
+        }
+        else if (Input.GetKeyDown(volumeShadowDebugKey))
+        {
+            ApplyDebugView(SdfPhase1Driver.DebugViewMode.VolumeShadow);
+        }
+        else if (Input.GetKeyDown(volumeCompositeDebugKey))
+        {
+            ApplyDebugView(SdfPhase1Driver.DebugViewMode.VolumeLight);
+        }
+    }
+
+    private void ApplyDebugView(SdfPhase1Driver.DebugViewMode debugView)
+    {
+        RefreshDrivers();
+        if (sdfDrivers == null || sdfDrivers.Length <= 0)
+        {
+            return;
         }
 
         for (int i = 0; i < sdfDrivers.Length; i++)

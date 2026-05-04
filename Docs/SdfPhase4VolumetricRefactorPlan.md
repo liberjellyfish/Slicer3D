@@ -121,16 +121,17 @@ transmittance *= segmentTransmittance;
 - 保持 debug view 为 `Lighting`，先看最终合成。
 - 需要诊断时依次切到 `VolumeDensity`、`VolumeTransmittance`、`VolumeShadow`、`VolumeLight`。
 - 默认关闭非 SDF 粒子粉尘，避免干扰数学体积光判断。
+- `SdfValidationEnvironmentController` 在 Play 模式支持运行时热键：`F1` 最终光照，`F2` 体积密度，`F3` 视线透射，`F4` 光源透射，`F5` 综合体积调试。
 
 ## Validation Order
 
 1. 打开 `Assets/Scenes/SdfSandbox.unity`。
 2. Play 模式下不切割，确认基础表面光照正常。
 3. 切一次，确认两个 piece 的切面仍然正确显示。
-4. 在 `SdfPhase1Driver` 中切换 `Debug View = VolumeDensity`，确认体积只在 proxy 内、SDF 表面附近和切面附近增强。
-5. 切到 `VolumeTransmittance`，确认密度增加时表面透射变暗。
-6. 切到 `VolumeShadow`，确认光源方向上被 SDF 几何遮挡的位置会变暗。
-7. 回到 `Debug View = Lighting`，旋转 Game View 相机，确认体积光随视角和主光方向连续变化。
+4. 按 `F2` 切到 `VolumeDensity`，确认体积只在 proxy 内、SDF 表面附近和切面附近增强。
+5. 按 `F3` 切到 `VolumeTransmittance`，确认密度增加时表面透射变暗。
+6. 按 `F4` 切到 `VolumeShadow`，确认光源方向上被 SDF 几何遮挡的位置会变暗。
+7. 按 `F1` 回到 `Lighting`，旋转 Game View 相机，确认体积光随视角和主光方向连续变化。
 8. 调整 `Volume Light Density / Intensity / Shadow Strength`，确认变化符合物理直觉：密度增加会增强散射，也会降低表面透射。
 
 ## Risks
