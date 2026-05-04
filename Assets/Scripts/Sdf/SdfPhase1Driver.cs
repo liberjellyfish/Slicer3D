@@ -76,6 +76,7 @@ public class SdfPhase1Driver : MonoBehaviour
     [SerializeField] [Range(-0.8f, 0.8f)] private float volumeLightAnisotropy = 0.15f;
     [SerializeField] [Range(4, 32)] private int volumeLightSamples = 20;
     [SerializeField] [Min(0.05f)] private float volumeLightMaxDistance = 1.2f;
+    [SerializeField] [Min(0.005f)] private float volumeLightMaxStepLength = 0.06f;
     [SerializeField] [Range(0.0f, 1.0f)] private float volumeLightShadowStrength = 0.75f;
     [SerializeField] [Min(0.0001f)] private float volumeLightShadowBias = 0.01f;
     [SerializeField] [Min(0.01f)] private float volumeLightSurfaceFadeDistance = 0.16f;
@@ -120,6 +121,7 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int VolumeLightAnisotropyId = Shader.PropertyToID("_VolumeLightAnisotropy");
     private static readonly int VolumeLightSamplesId = Shader.PropertyToID("_VolumeLightSamples");
     private static readonly int VolumeLightMaxDistanceId = Shader.PropertyToID("_VolumeLightMaxDistance");
+    private static readonly int VolumeLightMaxStepLengthId = Shader.PropertyToID("_VolumeLightMaxStepLength");
     private static readonly int VolumeLightShadowStrengthId = Shader.PropertyToID("_VolumeLightShadowStrength");
     private static readonly int VolumeLightShadowBiasId = Shader.PropertyToID("_VolumeLightShadowBias");
     private static readonly int VolumeLightSurfaceFadeDistanceId = Shader.PropertyToID("_VolumeLightSurfaceFadeDistance");
@@ -242,6 +244,7 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(VolumeLightAnisotropyId, volumeLightAnisotropy);
         propertyBlock.SetFloat(VolumeLightSamplesId, volumeLightSamples);
         propertyBlock.SetFloat(VolumeLightMaxDistanceId, volumeLightMaxDistance);
+        propertyBlock.SetFloat(VolumeLightMaxStepLengthId, volumeLightMaxStepLength);
         propertyBlock.SetFloat(VolumeLightShadowStrengthId, volumeLightShadowStrength);
         propertyBlock.SetFloat(VolumeLightShadowBiasId, volumeLightShadowBias);
         propertyBlock.SetFloat(VolumeLightSurfaceFadeDistanceId, volumeLightSurfaceFadeDistance);

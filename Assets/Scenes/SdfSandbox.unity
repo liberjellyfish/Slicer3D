@@ -211,13 +211,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 91931936}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.40821788, y: -0.23456968, z: 0.10938163, w: 0.8754261}
+  m_LocalRotation: {x: 0.42217624, y: -0.041447792, z: 0.019327419, w: 0.9053595}
   m_LocalPosition: {x: 0, y: 3, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
+  m_LocalEulerAnglesHint: {x: 50, y: -5.242, z: 0}
 --- !u!114 &91931939
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -228,8 +228,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   m_Version: 3
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -251,8 +251,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6788262aca2311647a9379d7ccf42672, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   animateInPlayMode: 1
   rotateYaw: 1
   yawSpeed: 18
@@ -290,8 +290,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 75329189b2d166040b2dd6013d7931d6, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   initialFocusSource: {fileID: 0}
   sourceOffset: {x: 0, y: 0, z: 0}
   initializeOnEnable: 1
@@ -331,7 +331,7 @@ Material:
     RenderType: Opaque
   disabledShaderPasses:
   - MOTIONVECTORS
-  m_LockedProperties:
+  m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -469,8 +469,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   m_RenderShadows: 1
   m_RequiresDepthTextureOption: 2
   m_RequiresOpaqueTextureOption: 2
@@ -513,8 +513,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1aea84fc922c4ca40b624be8deace930, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   target: {fileID: 286169588}
   targetOffset: {x: 0, y: 0, z: 0}
   autoInitializeFromCurrentTransform: 1
@@ -676,8 +676,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2054363eddc6a5441b8f070f4152bbf4, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   visualDistance: 5
   lineWidth: 0.03
 --- !u!120 &1570979117
@@ -797,8 +797,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 23313a318a646b3428bdd9f9745311f5, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   sliceableLayer:
     serializedVersion: 2
     m_Bits: 64
@@ -822,8 +822,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d8aa688b3b1e788439a77904a9edb18d, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!4 &1570979120
 Transform:
   m_ObjectHideFlags: 0
@@ -850,8 +850,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 375e2ffa80b12bd4a83fd474294885dc, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   enableDustField: 0
   keepOnlyLatestField: 1
   fieldSizeMultiplier: 1.1
@@ -874,8 +874,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 15625ff8e4b242d4daa70b5aae0f4aaa, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   directionalLight: {fileID: 91931937}
   lightingValidationRig: {fileID: 91931940}
   backdropRenderer: {fileID: 1412337071}
@@ -1027,8 +1027,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c52e07e5e65b922418cc371488b160d0, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   shapeMode: 0
   sphereCenter: {x: 0, y: 0, z: 0}
   sphereRadius: 0.33
@@ -1063,10 +1063,11 @@ MonoBehaviour:
   cutFaceFreshnessBoost: 0.3
   volumeLightEnabled: 1
   volumeLightIntensity: 3
-  volumeLightDensity: 1.4
+  volumeLightDensity: 0.8
   volumeLightAnisotropy: 0.15
-  volumeLightSamples: 20
-  volumeLightMaxDistance: 1.2
+  volumeLightSamples: 12
+  volumeLightMaxDistance: 0.8
+  volumeLightMaxStepLength: 0.1
   volumeLightShadowStrength: 0.75
   volumeLightShadowBias: 0.01
   volumeLightSurfaceFadeDistance: 0.16
@@ -1088,8 +1089,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1b7cc630c868f344dbdb89e44153fd3f, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   debugPlanes: []
   uploadDebugPlanesOnEnable: 1
   drawPlaneGizmos: 1
@@ -1109,8 +1110,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1d0faecc9ac8ea943bbe77deb0756a70, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   remainingSplits: 2
 --- !u!1660057539 &9223372036854775807
 SceneRoots:

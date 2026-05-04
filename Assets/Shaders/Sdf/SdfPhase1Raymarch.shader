@@ -37,6 +37,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
         _VolumeLightAnisotropy ("Volume Light Anisotropy", Range(-0.8, 0.8)) = 0.15
         _VolumeLightSamples ("Volume Light Samples", Range(4, 32)) = 20
         _VolumeLightMaxDistance ("Volume Light Max Distance", Float) = 1.2
+        _VolumeLightMaxStepLength ("Volume Light Max Step Length", Float) = 0.06
         _VolumeLightShadowStrength ("Volume Light Shadow Strength", Range(0.0, 1.0)) = 0.75
         _VolumeLightShadowBias ("Volume Light Shadow Bias", Float) = 0.01
         _VolumeLightSurfaceFadeDistance ("Volume Light Surface Fade Distance", Float) = 0.16
@@ -175,6 +176,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float _VolumeLightAnisotropy;
                 float _VolumeLightSamples;
                 float _VolumeLightMaxDistance;
+                float _VolumeLightMaxStepLength;
                 float _VolumeLightShadowStrength;
                 float _VolumeLightShadowBias;
                 float _VolumeLightSurfaceFadeDistance;
@@ -646,8 +648,8 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float3 rayOriginOS,
                 float3 rayDirOS,
                 float3 rayDirWS,
-                float tEnter,
-                float hitDistance,
+                float segmentStart,
+                float segmentEnd,
                 float3 mainLightDirWS,
                 float3 mainLightColor)
             {
@@ -663,15 +665,18 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     return volumeTerms;
                 }
 
-                float segmentEnd = hitDistance;
-                float segmentStart = max(max(tEnter, 0.0), segmentEnd - max(_VolumeLightMaxDistance, _HitEpsilon));
+                segmentStart = max(segmentStart, 0.0);
+                segmentEnd = min(segmentEnd, segmentStart + max(_VolumeLightMaxDistance, _HitEpsilon));
                 float segmentLength = segmentEnd - segmentStart;
                 if (segmentLength <= _HitEpsilon)
                 {
                     return volumeTerms;
                 }
 
-                int sampleCount = (int)_VolumeLightSamples;
+                float maxStepLength = max(_VolumeLightMaxStepLength, _HitEpsilon);
+                int requestedSampleCount = max((int)_VolumeLightSamples, 1);
+                int distanceSampleCount = max((int)ceil(segmentLength / maxStepLength), 1);
+                int sampleCount = min(max(requestedSampleCount, distanceSampleCount), 96);
                 float stepLength = segmentLength / sampleCount;
                 float3 viewDirWS = normalize(-rayDirWS);
                 float phase = EvaluateScatteringPhase(mainLightDirWS, viewDirWS);
@@ -796,6 +801,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
 
                 float t = max(tEnter, 0.0);
                 float maxDistance = min(_MaxDistance, tExit);
+                float volumeStart = max(tEnter, 0.0);
 
                 bool hit = false;
                 float3 hitPositionOS = 0.0;
@@ -821,37 +827,78 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     t += max(distanceToSurface, _HitEpsilon * 0.5);
                 }
 
-                if (!hit)
-                {
-                    clip(-1.0);
-                }
+                float hitDistance = hit ? t : maxDistance;
+                float volumeEnd = hit ? hitDistance : maxDistance;
+                float3 volumeDepthPositionOS = rayOriginOS + rayDirOS * volumeEnd;
+                float3 volumeDepthPositionWS = TransformObjectToWorld(volumeDepthPositionOS);
+                float3 volumeReferencePositionOS = rayOriginOS + rayDirOS * max(volumeStart, 0.0);
+                float3 volumeReferencePositionWS = TransformObjectToWorld(volumeReferencePositionOS);
 
-                float hitDistance = t;
-                SdfSurfaceData surfaceData = EvaluateSurfaceData(hitPositionOS);
-                float3 estimatedNormalOS = EstimateNormalOS(hitPositionOS);
-                float3 normalOS = ResolveSurfaceNormalOS(estimatedNormalOS, surfaceData);
-                float3 hitPositionWS = TransformObjectToWorld(hitPositionOS);
-                float3 normalWS = normalize(TransformObjectToWorldNormal(normalOS));
-                outDepth = ComputeNormalizedDeviceCoordinatesWithZ(hitPositionWS, GetWorldToHClipMatrix()).z;
-
-                SdfShadowTerms shadowTerms;
-                float3 finalColor = EvaluateLighting(hitPositionOS, hitPositionWS, normalOS, normalWS, surfaceData, shadowTerms);
-                Light volumeLight = GetMainLight(TransformWorldToShadowCoord(hitPositionWS));
+                Light volumeLight = GetMainLight(TransformWorldToShadowCoord(volumeReferencePositionWS));
                 SdfVolumeTerms volumeTerms = EvaluateVolumeLighting(
                     rayOriginOS,
                     rayDirOS,
                     rayDirWS,
-                    tEnter,
-                    hitDistance,
+                    volumeStart,
+                    volumeEnd,
                     normalize(volumeLight.direction),
                     volumeLight.color);
-                finalColor = finalColor * volumeTerms.transmittance + volumeTerms.scattering;
+
+                SdfSurfaceData surfaceData;
+                surfaceData.baseDistance = 0.0;
+                surfaceData.finalDistance = 0.0;
+                surfaceData.cutMask = 0.0;
+                surfaceData.cutDominanceMask = 0.0;
+                surfaceData.edgeMask = 0.0;
+                surfaceData.cutOcclusion = 1.0;
+                surfaceData.cutInteriorDepth = 0.0;
+                surfaceData.cutNormalOS = float3(0.0, 1.0, 0.0);
+                surfaceData.dominantPlaneDistance = 1e20;
+                surfaceData.dominantHalfSpace = -1e20;
+
+                SdfShadowTerms shadowTerms;
+                shadowTerms.mainLightShadow = 1.0;
+                shadowTerms.sdfSoftShadow = 1.0;
+                shadowTerms.totalShadow = 1.0;
+                float3 normalWS = float3(0.0, 1.0, 0.0);
+                float3 finalColor = float3(0.0, 0.0, 0.0);
+                float outputAlpha = 1.0;
+
+                if (hit)
+                {
+                    surfaceData = EvaluateSurfaceData(hitPositionOS);
+                    float3 estimatedNormalOS = EstimateNormalOS(hitPositionOS);
+                    float3 normalOS = ResolveSurfaceNormalOS(estimatedNormalOS, surfaceData);
+                    float3 hitPositionWS = TransformObjectToWorld(hitPositionOS);
+                    normalWS = normalize(TransformObjectToWorldNormal(normalOS));
+                    outDepth = ComputeNormalizedDeviceCoordinatesWithZ(hitPositionWS, GetWorldToHClipMatrix()).z;
+
+                    finalColor = EvaluateLighting(hitPositionOS, hitPositionWS, normalOS, normalWS, surfaceData, shadowTerms);
+                    finalColor = finalColor * volumeTerms.transmittance + volumeTerms.scattering;
+                }
+                else
+                {
+                    float volumeAlpha = saturate(1.0 - volumeTerms.transmittance);
+                    float scatteringLuminance = dot(volumeTerms.scattering, float3(0.2126, 0.7152, 0.0722));
+                    volumeAlpha = saturate(max(volumeAlpha, scatteringLuminance * 2.0));
+
+                    if (_DebugView <= 0.5 && volumeAlpha <= 0.003)
+                    {
+                        clip(-1.0);
+                    }
+
+                    outDepth = ComputeNormalizedDeviceCoordinatesWithZ(volumeDepthPositionWS, GetWorldToHClipMatrix()).z;
+                    finalColor = volumeAlpha > 1e-4 ? volumeTerms.scattering / volumeAlpha : float3(0.0, 0.0, 0.0);
+                    outputAlpha = volumeAlpha;
+                }
+
                 if (_DebugView > 0.5)
                 {
                     finalColor = EvaluateDebugView(surfaceData, normalWS, shadowTerms, volumeTerms);
+                    outputAlpha = 1.0;
                 }
 
-                return half4(finalColor, 1.0);
+                return half4(finalColor, outputAlpha);
             }
             ENDHLSL
         }

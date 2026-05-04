@@ -95,6 +95,15 @@ inscattered += transmittance * Sint;
 transmittance *= segmentTransmittance;
 ```
 
+第一批执行时先以内联形式落地在 `EvaluateVolumeLighting()` 中，积分区间改为：
+
+- 命中 SDF 表面：`[tEnter, hitDistance]`
+- 未命中 SDF 表面：`[tEnter, tExit]`
+- 使用 `Volume Light Max Distance` 限制最长积分距离
+- 使用 `Volume Light Max Step Length` 限制单步最大长度，并由采样数和距离共同决定实际 step count
+
+因此空白切割间隙和 proxy 内的无表面射线也会开始输出体积散射。
+
 ### Phase 4: Light-Ray Transmittance
 
 新增 `EvaluateVolumeLightTransmittance()`。
@@ -132,7 +141,8 @@ transmittance *= segmentTransmittance;
 5. 按 `F3` 切到 `VolumeTransmittance`，确认密度增加时表面透射变暗。
 6. 按 `F4` 切到 `VolumeShadow`，确认光源方向上被 SDF 几何遮挡的位置会变暗。
 7. 按 `F1` 回到 `Lighting`，旋转 Game View 相机，确认体积光随视角和主光方向连续变化。
-8. 调整 `Volume Light Density / Intensity / Shadow Strength`，确认变化符合物理直觉：密度增加会增强散射，也会降低表面透射。
+8. 观察切割间隙和 proxy 内空白区域，确认没有 SDF 表面命中的射线也能显示体积散射。
+9. 调整 `Volume Light Density / Intensity / Shadow Strength / Max Step Length`，确认变化符合物理直觉：密度增加会增强散射，也会降低表面透射；步长降低会减少条纹但增加成本。
 
 ## Risks
 
