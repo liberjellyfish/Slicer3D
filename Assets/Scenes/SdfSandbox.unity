@@ -907,6 +907,8 @@ MonoBehaviour:
   pulseLightIntensityInVolumeMode: 0
   applyVolumePresetInValidationModes: 1
   volumePreset: 1
+  enforceSingleVolumeBackground: 1
+  nonOwnerVolumeContributionMode: 1
   enableVirtualPointLight: 1
   virtualPointLightAnchor: {fileID: 0}
   animateVirtualPointLight: 1
@@ -1081,6 +1083,7 @@ MonoBehaviour:
   cutFaceEdgeBoost: 0.35
   cutFaceFreshnessBoost: 0.3
   volumeLightEnabled: 1
+  volumeContributionMode: 0
   volumeLightIntensity: 3
   volumeLightDensity: 0.8
   volumeLightAnisotropy: 0.15

@@ -109,6 +109,17 @@ visibility = lerp(1.0, visibility, VolumeLightShadowStrength);
 - 禁用明亮天空盒，切换为暗色 Camera background。
 - 驱动一个可旋转的虚拟点光，提升体积光束可读性。
 
+### H：切割后单背景体积
+
+切割会克隆 `SdfPhase1Driver`，如果每个子物体都渲染 no-hit 背景体积，就会产生多个 proxy volume box 叠加，表现为体积光束中出现莫名棱角和盒边。
+
+当前解决方案是“单背景体积 + 多表面体积”：
+
+- 只有一个 SDF driver 使用 `VolumeContributionMode.Full`，负责空射线上的背景体积。
+- 其他子物体使用 `VolumeContributionMode.SurfaceOnly`，只在命中自己表面时参与体积透射/散射。
+- `SdfValidationEnvironmentController` 会自动从当前所有 SDF drivers 中选择一个最靠近整体 bounds 中心的 background owner。
+- 这样既保留每个切片表面的体积合成，又避免多个体积盒互相叠加。
+
 ## SdfSandbox 默认状态
 
 `Assets/Scenes/SdfSandbox.unity` 已挂好需要的脚本和参数：
@@ -117,6 +128,7 @@ visibility = lerp(1.0, visibility, VolumeLightShadowStrength);
 - `SdfSlicerSystem` 上的 `SdfValidationEnvironmentController` 默认 `Validation Mode = FinalLighting`。
 - `Use Dark Validation Sky` 已开启，用来避免原天空盒把体积盒染成蓝色。
 - `Volume Preset = CinematicWarm`，这是当前推荐的观察 preset。
+- `Enforce Single Volume Background` 已开启，切割后只保留一个背景体积盒。
 
 ## Unity 验证顺序
 
@@ -129,6 +141,7 @@ visibility = lerp(1.0, visibility, VolumeLightShadowStrength);
 7. 按 `F4`：应同时包含 F6 和 F7 的效果，是体积光最终使用的阴影可见性。
 8. 按 `F5`：综合查看密度、透射和阴影是否集中在合理区域。
 9. 按 `F1` 回到最终画面，观察光源旋转时雾中亮带和阴影是否连续移动。
+10. 切割一次或多次，确认不会出现多个 proxy volume box 叠加出的硬棱角。
 
 ## 调参建议
 

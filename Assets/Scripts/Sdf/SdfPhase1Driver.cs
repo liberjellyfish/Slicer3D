@@ -37,6 +37,13 @@ public class SdfPhase1Driver : MonoBehaviour
         DiagnosticDense = 3
     }
 
+    public enum VolumeContributionMode
+    {
+        Full = 0,
+        SurfaceOnly = 1,
+        Disabled = 2
+    }
+
     [Header("Shape")]
     [SerializeField] private ShapeMode shapeMode = ShapeMode.Union;
     [SerializeField] private Vector3 sphereCenter = Vector3.zero;
@@ -81,6 +88,7 @@ public class SdfPhase1Driver : MonoBehaviour
 
     [Header("Volume Lighting")]
     [SerializeField] private bool volumeLightEnabled = false;
+    [SerializeField] private VolumeContributionMode volumeContributionMode = VolumeContributionMode.Full;
     [SerializeField] [Range(0.0f, 8.0f)] private float volumeLightIntensity = 3.0f;
     [SerializeField] [Range(0.0f, 8.0f)] private float volumeLightDensity = 1.4f;
     [SerializeField] [Range(-0.8f, 0.8f)] private float volumeLightAnisotropy = 0.15f;
@@ -147,6 +155,8 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int CutFaceEdgeBoostId = Shader.PropertyToID("_CutFaceEdgeBoost");
     private static readonly int CutFaceFreshnessBoostId = Shader.PropertyToID("_CutFaceFreshnessBoost");
     private static readonly int VolumeLightEnabledId = Shader.PropertyToID("_VolumeLightEnabled");
+    private static readonly int VolumeSurfaceContributionId = Shader.PropertyToID("_VolumeSurfaceContribution");
+    private static readonly int VolumeBackgroundContributionId = Shader.PropertyToID("_VolumeBackgroundContribution");
     private static readonly int VolumeLightIntensityId = Shader.PropertyToID("_VolumeLightIntensity");
     private static readonly int VolumeLightDensityId = Shader.PropertyToID("_VolumeLightDensity");
     private static readonly int VolumeLightAnisotropyId = Shader.PropertyToID("_VolumeLightAnisotropy");
@@ -238,6 +248,24 @@ public class SdfPhase1Driver : MonoBehaviour
         debugView = mode;
         CacheComponents();
         ApplyProperties();
+    }
+
+    public void SetVolumeContributionMode(VolumeContributionMode mode)
+    {
+        if (volumeContributionMode == mode)
+        {
+            return;
+        }
+
+        volumeContributionMode = mode;
+        CacheComponents();
+        ApplyProperties();
+    }
+
+    public Bounds GetWorldBounds()
+    {
+        CacheComponents();
+        return cachedRenderer != null ? cachedRenderer.bounds : new Bounds(transform.position, Vector3.zero);
     }
 
     public void SetVolumePointLight(bool enabled, Vector3 positionWS, Color color, float intensity, float range)
@@ -384,7 +412,12 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(CutFaceEdgeWidthId, cutFaceEdgeWidth);
         propertyBlock.SetFloat(CutFaceEdgeBoostId, cutFaceEdgeBoost);
         propertyBlock.SetFloat(CutFaceFreshnessBoostId, cutFaceFreshnessBoost);
-        propertyBlock.SetFloat(VolumeLightEnabledId, volumeLightEnabled ? 1.0f : 0.0f);
+        bool volumeEnabled = volumeLightEnabled && volumeContributionMode != VolumeContributionMode.Disabled;
+        float surfaceContribution = volumeEnabled ? 1.0f : 0.0f;
+        float backgroundContribution = volumeEnabled && volumeContributionMode == VolumeContributionMode.Full ? 1.0f : 0.0f;
+        propertyBlock.SetFloat(VolumeLightEnabledId, volumeEnabled ? 1.0f : 0.0f);
+        propertyBlock.SetFloat(VolumeSurfaceContributionId, surfaceContribution);
+        propertyBlock.SetFloat(VolumeBackgroundContributionId, backgroundContribution);
         propertyBlock.SetFloat(VolumeLightIntensityId, volumeLightIntensity);
         propertyBlock.SetFloat(VolumeLightDensityId, volumeLightDensity);
         propertyBlock.SetFloat(VolumeLightAnisotropyId, volumeLightAnisotropy);

@@ -63,6 +63,10 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     [SerializeField] private bool applyVolumePresetInValidationModes = true;
     [SerializeField] private SdfPhase1Driver.VolumePreset volumePreset = SdfPhase1Driver.VolumePreset.CinematicWarm;
 
+    [Header("Volume Ownership")]
+    [SerializeField] private bool enforceSingleVolumeBackground = true;
+    [SerializeField] private SdfPhase1Driver.VolumeContributionMode nonOwnerVolumeContributionMode = SdfPhase1Driver.VolumeContributionMode.SurfaceOnly;
+
     [Header("Virtual Point Light")]
     [SerializeField] private bool enableVirtualPointLight = true;
     [SerializeField] private Transform virtualPointLightAnchor;
@@ -126,6 +130,11 @@ public class SdfValidationEnvironmentController : MonoBehaviour
             UpdateVirtualPointLight();
         }
 
+        if (Application.isPlaying && enforceSingleVolumeBackground)
+        {
+            ApplyVolumeBackgroundOwnership();
+        }
+
         if (!Application.isPlaying || !enableRuntimeDebugHotkeys)
         {
             return;
@@ -147,6 +156,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         ApplyDust(volumeValidationActive);
         ApplyRig(validationActive);
         ApplyVolumePresetIfNeeded(volumeValidationActive);
+        ApplyVolumeBackgroundOwnership();
         if (volumeValidationActive)
         {
             UpdateVirtualPointLight();
@@ -176,6 +186,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     {
         AutoResolveReferences(true);
         ApplyVolumePresetIfNeeded(true);
+        ApplyVolumeBackgroundOwnership();
         UpdateVirtualPointLight();
     }
 
@@ -414,6 +425,86 @@ public class SdfValidationEnvironmentController : MonoBehaviour
 
             sdfDrivers[i].ApplyVolumePreset(volumePreset);
         }
+    }
+
+    [ContextMenu("Apply Volume Background Ownership")]
+    public void ApplyVolumeBackgroundOwnership()
+    {
+        if (!enforceSingleVolumeBackground)
+        {
+            return;
+        }
+
+        RefreshDrivers();
+        if (sdfDrivers == null || sdfDrivers.Length <= 0)
+        {
+            return;
+        }
+
+        SdfPhase1Driver owner = FindVolumeBackgroundOwner();
+        for (int i = 0; i < sdfDrivers.Length; i++)
+        {
+            if (sdfDrivers[i] == null)
+            {
+                continue;
+            }
+
+            SdfPhase1Driver.VolumeContributionMode mode = sdfDrivers[i] == owner
+                ? SdfPhase1Driver.VolumeContributionMode.Full
+                : nonOwnerVolumeContributionMode;
+            sdfDrivers[i].SetVolumeContributionMode(mode);
+        }
+    }
+
+    private SdfPhase1Driver FindVolumeBackgroundOwner()
+    {
+        Bounds combinedBounds = new Bounds();
+        bool hasBounds = false;
+        for (int i = 0; i < sdfDrivers.Length; i++)
+        {
+            if (sdfDrivers[i] == null)
+            {
+                continue;
+            }
+
+            Bounds driverBounds = sdfDrivers[i].GetWorldBounds();
+            if (!hasBounds)
+            {
+                combinedBounds = driverBounds;
+                hasBounds = true;
+                continue;
+            }
+
+            combinedBounds.Encapsulate(driverBounds);
+        }
+
+        if (!hasBounds)
+        {
+            return null;
+        }
+
+        Vector3 targetCenter = combinedBounds.center;
+        SdfPhase1Driver bestDriver = null;
+        float bestDistance = float.PositiveInfinity;
+        for (int i = 0; i < sdfDrivers.Length; i++)
+        {
+            if (sdfDrivers[i] == null)
+            {
+                continue;
+            }
+
+            Bounds driverBounds = sdfDrivers[i].GetWorldBounds();
+            float distance = (driverBounds.center - targetCenter).sqrMagnitude;
+            if (distance >= bestDistance)
+            {
+                continue;
+            }
+
+            bestDistance = distance;
+            bestDriver = sdfDrivers[i];
+        }
+
+        return bestDriver;
     }
 
     private void UpdateVirtualPointLight()

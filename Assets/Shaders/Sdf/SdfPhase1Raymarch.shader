@@ -32,6 +32,8 @@ Shader "Custom/Sdf/Phase1Raymarch"
 
         [Header(Volume Lighting)]
         _VolumeLightEnabled ("Volume Light Enabled", Range(0.0, 1.0)) = 0.0
+        _VolumeSurfaceContribution ("Volume Surface Contribution", Range(0.0, 1.0)) = 1.0
+        _VolumeBackgroundContribution ("Volume Background Contribution", Range(0.0, 1.0)) = 1.0
         _VolumeLightIntensity ("Volume Light Intensity", Range(0.0, 8.0)) = 3.0
         _VolumeLightDensity ("Volume Light Density", Range(0.0, 8.0)) = 1.4
         _VolumeLightAnisotropy ("Volume Light Anisotropy", Range(-0.8, 0.8)) = 0.15
@@ -193,6 +195,8 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float _CutFaceEdgeBoost;
                 float _CutFaceFreshnessBoost;
                 float _VolumeLightEnabled;
+                float _VolumeSurfaceContribution;
+                float _VolumeBackgroundContribution;
                 float _VolumeLightIntensity;
                 float _VolumeLightDensity;
                 float _VolumeLightAnisotropy;
@@ -1002,14 +1006,28 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float3 volumeReferencePositionWS = TransformObjectToWorld(volumeReferencePositionOS);
 
                 Light volumeLight = GetMainLight(TransformWorldToShadowCoord(volumeReferencePositionWS));
-                SdfVolumeTerms volumeTerms = EvaluateVolumeLighting(
-                    rayOriginOS,
-                    rayDirOS,
-                    rayDirWS,
-                    volumeStart,
-                    volumeEnd,
-                    normalize(volumeLight.direction),
-                    volumeLight.color);
+                SdfVolumeTerms volumeTerms;
+                volumeTerms.scattering = 0.0;
+                volumeTerms.transmittance = 1.0;
+                volumeTerms.debugValue = 0.0;
+                volumeTerms.densityDebug = 0.0;
+                volumeTerms.shadowDebug = 1.0;
+                volumeTerms.geometryShadowDebug = 1.0;
+                volumeTerms.mediaShadowDebug = 1.0;
+
+                bool wantsSurfaceVolume = hit && _VolumeSurfaceContribution > 0.5;
+                bool wantsBackgroundVolume = !hit && _VolumeBackgroundContribution > 0.5;
+                if (wantsSurfaceVolume || wantsBackgroundVolume || _DebugView > 0.5)
+                {
+                    volumeTerms = EvaluateVolumeLighting(
+                        rayOriginOS,
+                        rayDirOS,
+                        rayDirWS,
+                        volumeStart,
+                        volumeEnd,
+                        normalize(volumeLight.direction),
+                        volumeLight.color);
+                }
 
                 SdfSurfaceData surfaceData;
                 surfaceData.baseDistance = 0.0;
@@ -1045,6 +1063,11 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 }
                 else
                 {
+                    if (_VolumeBackgroundContribution <= 0.5)
+                    {
+                        clip(-1.0);
+                    }
+
                     float volumeAlpha = saturate(1.0 - volumeTerms.transmittance);
                     float scatteringLuminance = dot(volumeTerms.scattering, float3(0.2126, 0.7152, 0.0722));
                     volumeAlpha = saturate(max(volumeAlpha, scatteringLuminance * 2.0));
