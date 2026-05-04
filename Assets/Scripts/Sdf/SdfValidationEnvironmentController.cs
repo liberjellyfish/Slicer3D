@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine.Rendering;
 
 [ExecuteAlways]
 [DisallowMultipleComponent]
@@ -10,7 +11,15 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         Normal = 0,
         SoftShadow = 1,
         CutSurface = 2,
-        Volume = 3
+        Volume = 3,
+        Surface = 4,
+        VolumeDensity = 5,
+        VolumeTransmittance = 6,
+        VolumeShadow = 7,
+        VolumeComposite = 8,
+        FinalLighting = 9,
+        VolumeGeometryShadow = 10,
+        VolumeMediaTransmittance = 11
     }
 
     [Header("References")]
@@ -19,6 +28,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     [SerializeField] private Renderer backdropRenderer;
     [SerializeField] private GameObject dustVisualizationRoot;
     [SerializeField] private SdfPhase1Driver[] sdfDrivers = System.Array.Empty<SdfPhase1Driver>();
+    [SerializeField] private Camera[] validationCameras = System.Array.Empty<Camera>();
 
     [Header("Mode")]
     [SerializeField] private ValidationMode validationMode = ValidationMode.Normal;
@@ -28,6 +38,9 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     [Header("Lighting")]
     [SerializeField] private float normalAmbientIntensity = 1.0f;
     [SerializeField] private float validationAmbientIntensity = 0.35f;
+    [SerializeField] private bool useDarkValidationSky = true;
+    [SerializeField] private Color validationAmbientColor = new Color(0.035f, 0.033f, 0.03f, 1.0f);
+    [SerializeField] private Color validationCameraBackgroundColor = new Color(0.045f, 0.043f, 0.04f, 1.0f);
     [SerializeField] private float normalLightIntensity = 1.0f;
     [SerializeField] private float validationLightIntensity = 1.45f;
     [SerializeField] private Color normalLightColor = new Color(1.0f, 0.95686275f, 0.8392157f, 1.0f);
@@ -46,6 +59,22 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     [SerializeField] private bool animateLightInValidationModes = true;
     [SerializeField] private bool pulseLightIntensityInVolumeMode = false;
 
+    [Header("Volume Preset")]
+    [SerializeField] private bool applyVolumePresetInValidationModes = true;
+    [SerializeField] private SdfPhase1Driver.VolumePreset volumePreset = SdfPhase1Driver.VolumePreset.CinematicWarm;
+
+    [Header("Virtual Point Light")]
+    [SerializeField] private bool enableVirtualPointLight = true;
+    [SerializeField] private Transform virtualPointLightAnchor;
+    [SerializeField] private bool animateVirtualPointLight = true;
+    [SerializeField] private Vector3 virtualPointLightCenter = new Vector3(0.0f, 0.4f, -0.25f);
+    [SerializeField] [Min(0.05f)] private float virtualPointLightOrbitRadius = 2.35f;
+    [SerializeField] private float virtualPointLightHeight = 1.35f;
+    [SerializeField] private float virtualPointLightYawSpeed = 24.0f;
+    [SerializeField] private Color virtualPointLightColor = new Color(1.0f, 0.76f, 0.48f, 1.0f);
+    [SerializeField] [Min(0.0f)] private float virtualPointLightIntensity = 18.0f;
+    [SerializeField] [Min(0.05f)] private float virtualPointLightRange = 6.0f;
+
     [Header("Runtime Debug")]
     [SerializeField] private bool enableRuntimeDebugHotkeys = true;
     [SerializeField] private KeyCode lightingDebugKey = KeyCode.F1;
@@ -53,12 +82,20 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     [SerializeField] private KeyCode volumeTransmittanceDebugKey = KeyCode.F3;
     [SerializeField] private KeyCode volumeShadowDebugKey = KeyCode.F4;
     [SerializeField] private KeyCode volumeCompositeDebugKey = KeyCode.F5;
+    [SerializeField] private KeyCode volumeGeometryShadowDebugKey = KeyCode.F6;
+    [SerializeField] private KeyCode volumeMediaShadowDebugKey = KeyCode.F7;
 
     private Texture2D generatedCookie;
     private Mesh generatedBackdropMesh;
     private LightShadows cachedShadowMode;
     private float cachedAmbientIntensity = -1.0f;
+    private AmbientMode cachedAmbientMode;
+    private Color cachedAmbientLight;
+    private Material cachedSkyboxMaterial;
     private Material generatedBackdropMaterial;
+    private CameraClearFlags[] cachedCameraClearFlags = System.Array.Empty<CameraClearFlags>();
+    private Color[] cachedCameraBackgroundColors = System.Array.Empty<Color>();
+    private bool hasCachedCameraState;
 
     private void OnEnable()
     {
@@ -73,6 +110,8 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     private void OnValidate()
     {
         cookieResolution = Mathf.Max(16, cookieResolution);
+        virtualPointLightOrbitRadius = Mathf.Max(0.05f, virtualPointLightOrbitRadius);
+        virtualPointLightRange = Mathf.Max(0.05f, virtualPointLightRange);
         AutoResolveReferences(false);
         if (Application.isPlaying && applyOnValidate)
         {
@@ -82,6 +121,11 @@ public class SdfValidationEnvironmentController : MonoBehaviour
 
     private void Update()
     {
+        if (Application.isPlaying && IsVolumeValidationMode(validationMode))
+        {
+            UpdateVirtualPointLight();
+        }
+
         if (!Application.isPlaying || !enableRuntimeDebugHotkeys)
         {
             return;
@@ -96,11 +140,17 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         AutoResolveReferences(true);
         CacheDefaults();
 
-        bool validationActive = validationMode != ValidationMode.Normal;
+        bool validationActive = IsValidationModeActive(validationMode);
+        bool volumeValidationActive = IsVolumeValidationMode(validationMode);
         ApplyLighting(validationActive);
         ApplyBackdrop(validationActive);
-        ApplyDust(validationActive && validationMode == ValidationMode.Volume);
+        ApplyDust(volumeValidationActive);
         ApplyRig(validationActive);
+        ApplyVolumePresetIfNeeded(volumeValidationActive);
+        if (volumeValidationActive)
+        {
+            UpdateVirtualPointLight();
+        }
         ApplyDriverDebug(validationMode);
     }
 
@@ -119,6 +169,14 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         {
             normalBackdropColor = backdropRenderer.sharedMaterial.color;
         }
+    }
+
+    [ContextMenu("Apply Volume Preset To Drivers")]
+    public void ApplyVolumePresetToDrivers()
+    {
+        AutoResolveReferences(true);
+        ApplyVolumePresetIfNeeded(true);
+        UpdateVirtualPointLight();
     }
 
     [ContextMenu("Auto Resolve References")]
@@ -159,6 +217,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
 
         RefreshDrivers();
         RefreshDustRoot();
+        RefreshValidationCameras();
     }
 
     private void CacheDefaults()
@@ -166,17 +225,106 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         if (cachedAmbientIntensity < 0.0f)
         {
             cachedAmbientIntensity = RenderSettings.ambientIntensity;
+            cachedAmbientMode = RenderSettings.ambientMode;
+            cachedAmbientLight = RenderSettings.ambientLight;
+            cachedSkyboxMaterial = RenderSettings.skybox;
         }
 
         if (directionalLight != null)
         {
             cachedShadowMode = directionalLight.shadows;
         }
+
+        CacheCameraDefaults();
+    }
+
+    private static bool IsValidationModeActive(ValidationMode mode)
+    {
+        return mode != ValidationMode.Normal;
+    }
+
+    private static bool IsVolumeValidationMode(ValidationMode mode)
+    {
+        return mode == ValidationMode.Volume
+            || mode == ValidationMode.VolumeDensity
+            || mode == ValidationMode.VolumeTransmittance
+            || mode == ValidationMode.VolumeShadow
+            || mode == ValidationMode.VolumeComposite
+            || mode == ValidationMode.FinalLighting
+            || mode == ValidationMode.VolumeGeometryShadow
+            || mode == ValidationMode.VolumeMediaTransmittance;
+    }
+
+    private void CacheCameraDefaults()
+    {
+        if (hasCachedCameraState || validationCameras == null)
+        {
+            return;
+        }
+
+        cachedCameraClearFlags = new CameraClearFlags[validationCameras.Length];
+        cachedCameraBackgroundColors = new Color[validationCameras.Length];
+        for (int i = 0; i < validationCameras.Length; i++)
+        {
+            if (validationCameras[i] == null)
+            {
+                continue;
+            }
+
+            cachedCameraClearFlags[i] = validationCameras[i].clearFlags;
+            cachedCameraBackgroundColors[i] = validationCameras[i].backgroundColor;
+        }
+
+        hasCachedCameraState = true;
+    }
+
+    private void ApplyCameraBackground(bool validationActive)
+    {
+        if (validationCameras == null || validationCameras.Length <= 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < validationCameras.Length; i++)
+        {
+            Camera targetCamera = validationCameras[i];
+            if (targetCamera == null)
+            {
+                continue;
+            }
+
+            if (validationActive)
+            {
+                targetCamera.clearFlags = CameraClearFlags.SolidColor;
+                targetCamera.backgroundColor = validationCameraBackgroundColor;
+                continue;
+            }
+
+            if (hasCachedCameraState && i < cachedCameraClearFlags.Length && i < cachedCameraBackgroundColors.Length)
+            {
+                targetCamera.clearFlags = cachedCameraClearFlags[i];
+                targetCamera.backgroundColor = cachedCameraBackgroundColors[i];
+            }
+        }
     }
 
     private void ApplyLighting(bool validationActive)
     {
         RenderSettings.ambientIntensity = validationActive ? validationAmbientIntensity : normalAmbientIntensity;
+        if (validationActive && useDarkValidationSky)
+        {
+            RenderSettings.skybox = null;
+            RenderSettings.ambientMode = AmbientMode.Flat;
+            RenderSettings.ambientLight = validationAmbientColor;
+            ApplyCameraBackground(validationActive);
+        }
+        else if (!validationActive)
+        {
+            RenderSettings.skybox = cachedSkyboxMaterial;
+            RenderSettings.ambientMode = cachedAmbientMode;
+            RenderSettings.ambientLight = cachedAmbientLight;
+            ApplyCameraBackground(validationActive);
+        }
 
         if (directionalLight == null)
         {
@@ -241,7 +389,76 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         lightingValidationRig.ConfigureSweep(
             enableYawRotation: validationActive,
             enablePitchOscillation: validationActive,
-            enableIntensityPulse: validationMode == ValidationMode.Volume && pulseLightIntensityInVolumeMode);
+            enableIntensityPulse: IsVolumeValidationMode(validationMode) && pulseLightIntensityInVolumeMode);
+    }
+
+    private void ApplyVolumePresetIfNeeded(bool volumeValidationActive)
+    {
+        if (!applyVolumePresetInValidationModes || !volumeValidationActive)
+        {
+            return;
+        }
+
+        RefreshDrivers();
+        if (sdfDrivers == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < sdfDrivers.Length; i++)
+        {
+            if (sdfDrivers[i] == null)
+            {
+                continue;
+            }
+
+            sdfDrivers[i].ApplyVolumePreset(volumePreset);
+        }
+    }
+
+    private void UpdateVirtualPointLight()
+    {
+        RefreshDrivers();
+        if (sdfDrivers == null || sdfDrivers.Length <= 0)
+        {
+            return;
+        }
+
+        Vector3 pointLightPosition = GetVirtualPointLightPosition();
+        for (int i = 0; i < sdfDrivers.Length; i++)
+        {
+            if (sdfDrivers[i] == null)
+            {
+                continue;
+            }
+
+            sdfDrivers[i].SetVolumePointLight(
+                enableVirtualPointLight,
+                pointLightPosition,
+                virtualPointLightColor,
+                virtualPointLightIntensity,
+                virtualPointLightRange);
+        }
+    }
+
+    private Vector3 GetVirtualPointLightPosition()
+    {
+        if (virtualPointLightAnchor != null)
+        {
+            return virtualPointLightAnchor.position;
+        }
+
+        float angle = 0.0f;
+        if (Application.isPlaying && animateVirtualPointLight)
+        {
+            angle = Time.time * virtualPointLightYawSpeed * Mathf.Deg2Rad;
+        }
+
+        Vector3 orbitOffset = new Vector3(
+            Mathf.Cos(angle) * virtualPointLightOrbitRadius,
+            virtualPointLightHeight,
+            Mathf.Sin(angle) * virtualPointLightOrbitRadius);
+        return virtualPointLightCenter + orbitOffset;
     }
 
     private void ApplyDriverDebug(ValidationMode mode)
@@ -258,6 +475,24 @@ public class SdfValidationEnvironmentController : MonoBehaviour
             case ValidationMode.Volume:
                 debugView = SdfPhase1Driver.DebugViewMode.VolumeLight;
                 break;
+            case ValidationMode.VolumeDensity:
+                debugView = SdfPhase1Driver.DebugViewMode.VolumeDensity;
+                break;
+            case ValidationMode.VolumeTransmittance:
+                debugView = SdfPhase1Driver.DebugViewMode.VolumeTransmittance;
+                break;
+            case ValidationMode.VolumeShadow:
+                debugView = SdfPhase1Driver.DebugViewMode.VolumeShadow;
+                break;
+            case ValidationMode.VolumeComposite:
+                debugView = SdfPhase1Driver.DebugViewMode.VolumeLight;
+                break;
+            case ValidationMode.VolumeGeometryShadow:
+                debugView = SdfPhase1Driver.DebugViewMode.VolumeGeometryShadow;
+                break;
+            case ValidationMode.VolumeMediaTransmittance:
+                debugView = SdfPhase1Driver.DebugViewMode.VolumeMediaTransmittance;
+                break;
         }
 
         ApplyDebugView(debugView);
@@ -267,24 +502,38 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     {
         if (Input.GetKeyDown(lightingDebugKey))
         {
-            ApplyDebugView(SdfPhase1Driver.DebugViewMode.Lighting);
+            ApplyRuntimeDebugMode(ValidationMode.FinalLighting);
         }
         else if (Input.GetKeyDown(volumeDensityDebugKey))
         {
-            ApplyDebugView(SdfPhase1Driver.DebugViewMode.VolumeDensity);
+            ApplyRuntimeDebugMode(ValidationMode.VolumeDensity);
         }
         else if (Input.GetKeyDown(volumeTransmittanceDebugKey))
         {
-            ApplyDebugView(SdfPhase1Driver.DebugViewMode.VolumeTransmittance);
+            ApplyRuntimeDebugMode(ValidationMode.VolumeTransmittance);
         }
         else if (Input.GetKeyDown(volumeShadowDebugKey))
         {
-            ApplyDebugView(SdfPhase1Driver.DebugViewMode.VolumeShadow);
+            ApplyRuntimeDebugMode(ValidationMode.VolumeShadow);
         }
         else if (Input.GetKeyDown(volumeCompositeDebugKey))
         {
-            ApplyDebugView(SdfPhase1Driver.DebugViewMode.VolumeLight);
+            ApplyRuntimeDebugMode(ValidationMode.VolumeComposite);
         }
+        else if (Input.GetKeyDown(volumeGeometryShadowDebugKey))
+        {
+            ApplyRuntimeDebugMode(ValidationMode.VolumeGeometryShadow);
+        }
+        else if (Input.GetKeyDown(volumeMediaShadowDebugKey))
+        {
+            ApplyRuntimeDebugMode(ValidationMode.VolumeMediaTransmittance);
+        }
+    }
+
+    private void ApplyRuntimeDebugMode(ValidationMode mode)
+    {
+        validationMode = mode;
+        ApplyCurrentMode();
     }
 
     private void ApplyDebugView(SdfPhase1Driver.DebugViewMode debugView)
@@ -340,6 +589,33 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         {
             dustVisualizationRoot = dustController.DustRoot.gameObject;
         }
+    }
+
+    private void RefreshValidationCameras()
+    {
+        if (validationCameras != null && validationCameras.Length > 0)
+        {
+            return;
+        }
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera != null)
+        {
+            validationCameras = new[] { mainCamera };
+            return;
+        }
+
+        Camera[] foundCameras = Object.FindObjectsByType<Camera>(FindObjectsSortMode.None);
+        List<Camera> sceneCameras = new List<Camera>(foundCameras.Length);
+        for (int i = 0; i < foundCameras.Length; i++)
+        {
+            if (foundCameras[i] != null && foundCameras[i].gameObject.scene.IsValid())
+            {
+                sceneCameras.Add(foundCameras[i]);
+            }
+        }
+
+        validationCameras = sceneCameras.ToArray();
     }
 
     private void EnsureBackdropExists()

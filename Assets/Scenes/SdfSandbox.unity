@@ -882,11 +882,16 @@ MonoBehaviour:
   dustVisualizationRoot: {fileID: 0}
   sdfDrivers:
   - {fileID: 1680505283}
-  validationMode: 0
+  validationCameras:
+  - {fileID: 1109503984}
+  validationMode: 9
   applyOnEnable: 1
   applyOnValidate: 1
   normalAmbientIntensity: 1
   validationAmbientIntensity: 0.35
+  useDarkValidationSky: 1
+  validationAmbientColor: {r: 0.035, g: 0.033, b: 0.03, a: 1}
+  validationCameraBackgroundColor: {r: 0.045, g: 0.043, b: 0.04, a: 1}
   normalLightIntensity: 1
   validationLightIntensity: 1.45
   normalLightColor: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
@@ -900,12 +905,26 @@ MonoBehaviour:
   validationBackdropColor: {r: 0.12, g: 0.14, b: 0.18, a: 1}
   animateLightInValidationModes: 1
   pulseLightIntensityInVolumeMode: 0
+  applyVolumePresetInValidationModes: 1
+  volumePreset: 1
+  enableVirtualPointLight: 1
+  virtualPointLightAnchor: {fileID: 0}
+  animateVirtualPointLight: 1
+  virtualPointLightCenter: {x: 0, y: 0.4, z: -0.25}
+  virtualPointLightOrbitRadius: 2.35
+  virtualPointLightHeight: 1.35
+  virtualPointLightYawSpeed: 24
+  virtualPointLightColor: {r: 1, g: 0.76, b: 0.48, a: 1}
+  virtualPointLightIntensity: 18
+  virtualPointLightRange: 6
   enableRuntimeDebugHotkeys: 1
   lightingDebugKey: 282
   volumeDensityDebugKey: 283
   volumeTransmittanceDebugKey: 284
   volumeShadowDebugKey: 285
   volumeCompositeDebugKey: 286
+  volumeGeometryShadowDebugKey: 287
+  volumeMediaShadowDebugKey: 288
 --- !u!1 &1680505278
 GameObject:
   m_ObjectHideFlags: 0
@@ -1070,13 +1089,26 @@ MonoBehaviour:
   volumeLightMaxStepLength: 0.1
   volumeLightShadowStrength: 0.75
   volumeLightShadowBias: 0.01
-  volumeLightSurfaceFadeDistance: 0.16
+  volumeLightSurfaceFadeDistance: 0.22
   volumeLightPlaneBand: 0.16
   volumeLightRemovedDepth: 0.28
   volumeLightShapeDepth: 0.24
   volumeLightNoiseScale: 4
   volumeLightNoiseStrength: 0.18
   volumeLightNoiseDrift: 0.2
+  volumeBaseFogDensity: 0.003
+  volumeHeightFogStrength: 0.11
+  volumeCutFogBoost: 1.55
+  volumeNoiseContrast: 1.35
+  volumeShadowSamples: 18
+  volumeShadowMaxDistance: 2.1
+  volumePointLightEnabled: 1
+  volumePointLightPositionWS: {x: 1.4, y: 1.6, z: -2.2}
+  volumePointLightColor: {r: 1, g: 0.76, b: 0.48, a: 1}
+  volumePointLightIntensity: 18
+  volumePointLightRange: 6
+  volumeExposure: 1.25
+  volumeColorTint: {r: 1, g: 0.78, b: 0.54, a: 1}
   debugView: 0
   syncEveryFrame: 1
 --- !u!114 &1680505284

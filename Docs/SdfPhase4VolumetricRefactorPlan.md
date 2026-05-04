@@ -1,151 +1,145 @@
 # SDF Phase 4 Volumetric Lighting Refactor Plan
 
-## Goal
+## 目标
 
-将阶段 4 从“切面附近的启发式发光雾效”重构为基于 SDF 几何边界和参与介质积分的单次散射体积光。
+阶段 4 的目标是把体积光从“切面附近的亮雾贴片”重构为基于 SDF 场和参与介质积分的单次散射模型。
 
 最终合成遵循：
 
 ```hlsl
-finalColor = surfaceLighting * volume.transmittanceToSurface + volume.inscatteredLight;
+finalColor = surfaceLighting * volume.transmittance + volume.scattering;
 ```
 
-这意味着体积光不再是命中点之后简单 `finalColor += scattering`，而是沿相机射线持续积分介质，并让介质消光真实影响表面可见亮度。
+这意味着体积光不再只是简单叠加亮色，而是沿相机射线累积介质散射，并用介质消光削弱后方表面。
 
-## Reference Principles
+## 已完成阶段
 
-参考脚本中需要迁移到当前项目的核心结构是：
+### A/B：视线积分与基础合成
 
-- `getParticipatingMedia(out sigmaS, out sigmaE, pos)`：空间采样点返回散射系数和消光系数。
-- `volumetricShadow(from, to)`：从体积采样点朝光源方向估算透射率。
-- `traceScene()`：视线方向同时进行 SDF march 和体积积分。
-- Frostbite improved integration：每个步长内用 `Sint = S * (1 - exp(-sigmaE * stepLength)) / sigmaE` 积分，避免强介质下能量表现离谱。
-- 体积积分步长需要上限，不能完全依赖 SDF 大步长，否则会漏掉介质贡献。
+- 命中 SDF 表面时，体积积分区间为 `[proxyEnter, hitDistance]`。
+- 未命中 SDF 表面时，体积积分区间为 `[proxyEnter, proxyExit]`，并受 `Volume Light Max Distance` 限制。
+- 每步使用 Frostbite 风格改进积分：`S * (1 - exp(-sigmaE * ds)) / sigmaE`。
+- 表面结果使用 `surface * transmittance + scattering` 合成。
 
-## Current Problems
+### C：介质模型升级
 
-当前 `SdfPhase1Raymarch.shader` 的阶段 4 主要问题：
+`GetParticipatingMedia()` 现在输出真正的 `sigmaS / sigmaE / densityDebug`，介质由多项组成：
 
-- `EvaluateLocalVolumeMediumMask()` 返回的是切面附近 mask，不是 `sigmaS / sigmaE` 物理量。
-- `EvaluateVolumeLighting()` 只采样命中表面前一小段，视觉上像贴在表面前的雾。
-- 体积阴影复用了表面阴影概念，缺少采样点到光源路径的介质透射。
-- 最终颜色是 `finalColor += volumeTerms.scattering`，没有用体积透射削弱表面项。
-- debug 只暴露一个 `VolumeLight` 灰度值，难以定位是介质、阴影、积分还是合成出错。
+- `Volume Base Fog Density`：整个 proxy 内的弱基础空间雾。默认很低，避免蓝色体积盒。
+- `Volume Height Fog Strength`：object-space 高度雾，让低处介质更浓。
+- `Volume Light Shape Depth`：SDF 表面附近的指数衰减介质层。
+- `Volume Cut Fog Boost`：切面附近额外密度增强，但不再主导所有体积效果。
+- `Volume Noise Contrast`：控制 value noise 的对比度。
+- `Volume Light Surface Fade Distance`：proxy 边界淡出，用来隐藏硬盒轮廓。
 
-## Refactor Phases
+### D：光源模型增强
 
-### Phase 1: Documentation and Boundaries
+体积采样现在支持两类入射光：
 
-产出当前文档，明确阶段 4 的数学结构和执行边界。
+- URP Directional Light：仍作为默认主光，表面光照也继续使用它。
+- Shader 验证点光：只参与体积散射，用 `intensity / distance^2` 衰减，接近参考 shader 中高能点光的视觉来源。
 
-保留：
+新增点光参数：
 
-- `Map()` / `BaseShapeMap()` / `ApplyCutPlanes()`
-- `EstimateNormalOS()`
-- `SampleSdfSoftShadow()`
-- 表面主光照和切面着色
+- `Volume Point Light Enabled`
+- `Volume Point Light Position WS`
+- `Volume Point Light Color`
+- `Volume Point Light Intensity`
+- `Volume Point Light Range`
 
-替换：
+### E：体积阴影质量
 
-- `EvaluateLocalVolumeMediumMask()`
-- `EvaluateVolumeShadowVisibility()`
-- `EvaluateVolumeLighting()` 的积分方式和输出语义
+体积阴影拆成两条路径：
 
-### Phase 2: Participating Media Model
+- 几何遮挡：沿光源方向做 SDF march，命中几何则遮挡。
+- 介质透射：沿光源方向采样 `sigmaE`，累积 `exp(-sigmaE * ds)`。
 
-新增 `GetParticipatingMedia()`，输出：
-
-- `sigmaS`：散射系数
-- `sigmaE`：消光系数
-- `densityDebug`：仅用于 debug 的介质密度预览
-
-第一版介质由三部分组成：
-
-- 弱基础介质：让体积光能稳定被看见。
-- SDF 表面附近介质：用 `Map(p)` 的距离形成靠近几何的柔和介质层。
-- 切面增强介质：有切割面时，用主导切割平面和基础形体内部深度增强新鲜切面附近的介质。
-
-这样仍然利用切割数据，但切割只负责调制介质系数，不直接等同于光照。
-
-### Phase 3: View-Ray Integration
-
-新增 `IntegrateVolumeAlongViewRay()`。
-
-输入：
-
-- object-space ray origin / direction
-- world-space ray direction
-- `tEnter`
-- `hitDistance`
-- main light direction and color
-
-输出：
-
-- `inscatteredLight`
-- `transmittance`
-- debug fields
-
-积分方式：
+最终体积光可见性为：
 
 ```hlsl
-S = lightColor * lightVisibility * sigmaS * phase;
-segmentTransmittance = exp(-sigmaE * stepLength);
-Sint = S * (1 - segmentTransmittance) / sigmaE;
-inscattered += transmittance * Sint;
-transmittance *= segmentTransmittance;
+visibility = geometryVisibility * mediaTransmittance;
+visibility = lerp(1.0, visibility, VolumeLightShadowStrength);
 ```
 
-第一批执行时先以内联形式落地在 `EvaluateVolumeLighting()` 中，积分区间改为：
+新增参数：
 
-- 命中 SDF 表面：`[tEnter, hitDistance]`
-- 未命中 SDF 表面：`[tEnter, tExit]`
-- 使用 `Volume Light Max Distance` 限制最长积分距离
-- 使用 `Volume Light Max Step Length` 限制单步最大长度，并由采样数和距离共同决定实际 step count
+- `Volume Shadow Samples`
+- `Volume Shadow Max Distance`
 
-因此空白切割间隙和 proxy 内的无表面射线也会开始输出体积散射。
+新增 debug：
 
-### Phase 4: Light-Ray Transmittance
+- `VolumeGeometryShadow`
+- `VolumeMediaTransmittance`
+- `VolumeShadow` 仍表示二者合成后的可见性。
 
-新增 `EvaluateVolumeLightTransmittance()`。
+### F：曝光与色调
 
-从每个体积采样点朝主光方向 raymarch：
+最终非 debug 视图会经过保守显示映射：
 
-- 如果 SDF 几何命中，则认为几何遮挡光源。
-- 沿途累积介质消光 `exp(-sigmaE * ds)`。
-- 用 `_VolumeLightShadowStrength` 控制体积阴影参与度。
+- `Volume Exposure` 控制最终输出曝光。
+- `Volume Color Tint` 只给体积散射染色，不直接改变表面材质。
+- Debug view 不走曝光和 tone mapping，保持诊断值准确。
 
-### Phase 5: Driver and Scene Preset
+### G：Unity 验证工具
 
-同步 `SdfPhase1Driver` 参数名义和默认值：
+`SdfValidationEnvironmentController` 已扩展：
 
-- 将旧的 `VolumeLightDensity` 作为主要散射密度。
-- 将 `VolumeLightShapeDepth` 用作 SDF 表面介质厚度。
-- 将 `VolumeLightPlaneBand` 用作切面增强带宽。
-- 将 `VolumeLightRemovedDepth` 用作切面内部深度。
-- `VolumeLightSurfaceFadeDistance` 改为视线积分远端/近表面淡出宽度。
+- `FinalLighting`
+- `Surface`
+- `VolumeDensity`
+- `VolumeTransmittance`
+- `VolumeShadow`
+- `VolumeComposite`
+- `VolumeGeometryShadow`
+- `VolumeMediaTransmittance`
 
-`SdfSandbox` 验证预设：
+运行时热键：
 
-- 开启体积光。
-- 保持 debug view 为 `Lighting`，先看最终合成。
-- 需要诊断时依次切到 `VolumeDensity`、`VolumeTransmittance`、`VolumeShadow`、`VolumeLight`。
-- 默认关闭非 SDF 粒子粉尘，避免干扰数学体积光判断。
-- `SdfValidationEnvironmentController` 在 Play 模式支持运行时热键：`F1` 最终光照，`F2` 体积密度，`F3` 视线透射，`F4` 光源透射，`F5` 综合体积调试。
+- `F1`：FinalLighting，最终光照。
+- `F2`：VolumeDensity，介质密度。
+- `F3`：VolumeTransmittance，视线透射。
+- `F4`：VolumeShadow，几何遮挡和介质透射合成。
+- `F5`：VolumeComposite，综合体积 debug。
+- `F6`：VolumeGeometryShadow，只看 SDF 几何遮挡。
+- `F7`：VolumeMediaTransmittance，只看介质透射。
 
-## Validation Order
+验证控制器还会在体积验证模式中：
+
+- 应用 `CinematicWarm` 体积 preset。
+- 禁用明亮天空盒，切换为暗色 Camera background。
+- 驱动一个可旋转的虚拟点光，提升体积光束可读性。
+
+## SdfSandbox 默认状态
+
+`Assets/Scenes/SdfSandbox.unity` 已挂好需要的脚本和参数：
+
+- `SdfProxyCube` 上的 `SdfPhase1Driver` 开启体积光，并使用暖色点光参数。
+- `SdfSlicerSystem` 上的 `SdfValidationEnvironmentController` 默认 `Validation Mode = FinalLighting`。
+- `Use Dark Validation Sky` 已开启，用来避免原天空盒把体积盒染成蓝色。
+- `Volume Preset = CinematicWarm`，这是当前推荐的观察 preset。
+
+## Unity 验证顺序
 
 1. 打开 `Assets/Scenes/SdfSandbox.unity`。
-2. Play 模式下不切割，确认基础表面光照正常。
-3. 切一次，确认两个 piece 的切面仍然正确显示。
-4. 按 `F2` 切到 `VolumeDensity`，确认体积只在 proxy 内、SDF 表面附近和切面附近增强。
-5. 按 `F3` 切到 `VolumeTransmittance`，确认密度增加时表面透射变暗。
-6. 按 `F4` 切到 `VolumeShadow`，确认光源方向上被 SDF 几何遮挡的位置会变暗。
-7. 按 `F1` 回到 `Lighting`，旋转 Game View 相机，确认体积光随视角和主光方向连续变化。
-8. 观察切割间隙和 proxy 内空白区域，确认没有 SDF 表面命中的射线也能显示体积散射。
-9. 调整 `Volume Light Density / Intensity / Shadow Strength / Max Step Length`，确认变化符合物理直觉：密度增加会增强散射，也会降低表面透射；步长降低会减少条纹但增加成本。
+2. 进入 Play，先看 `F1` 最终效果：背景应变暗，蓝色 proxy 盒感应明显减弱，体积光应偏暖色。
+3. 按 `F2`：密度应在 proxy 内连续存在，但边界淡出；SDF 表面和切面附近更亮。
+4. 按 `F3`：密度更高的区域应更暗，表示相机到表面的透射降低。
+5. 按 `F6`：能看到 SDF 几何对光源路径的遮挡。
+6. 按 `F7`：能看到介质本身造成的透射衰减。
+7. 按 `F4`：应同时包含 F6 和 F7 的效果，是体积光最终使用的阴影可见性。
+8. 按 `F5`：综合查看密度、透射和阴影是否集中在合理区域。
+9. 按 `F1` 回到最终画面，观察光源旋转时雾中亮带和阴影是否连续移动。
 
-## Risks
+## 调参建议
 
-- 目前没有阶段 3 tile culling，体积阴影会显著增加 fragment 成本。
-- 当前 pass 只在 proxy mesh 被命中时输出体积结果，背景空射线不会显示独立雾体。
-- Unity 工程的 `Assembly-CSharp.csproj` 仍引用旧路径文件，`dotnet build` 不能作为完整验证依据。
+- 仍看到明显盒子边：增大 `Volume Light Surface Fade Distance` 到 `0.28-0.35`，或降低 `Volume Base Fog Density`。
+- 体积光不明显：优先增大 `Volume Point Light Intensity` 或 `Volume Exposure`，不要先盲目提高密度。
+- 画面太白：降低 `Volume Exposure` 或 `Volume Point Light Intensity`。
+- 画面太卡：把 `Volume Light Samples` 调到 `8-10`，把 `Volume Shadow Samples` 调到 `8-12`，或增大 `Volume Light Max Step Length` 到 `0.12`。
+- 想进一步去掉天空影响：保持 `Use Dark Validation Sky` 开启，并使用 `Validation Camera Background Color` 控制背景色。
+
+## 已知风险
+
+- 阶段 3 的 tile culling 尚未执行，体积阴影会显著增加 fragment 成本。
+- 当前体积仍在 proxy mesh pass 内渲染，严格的独立 full-screen volume pass 还没有拆出来。
+- Unity 生成的 `Assembly-CSharp.csproj` 仍引用了一批已不存在的旧脚本，因此 `dotnet build` 目前不能作为完整项目验证依据。
