@@ -1,6 +1,4 @@
 using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -28,16 +26,10 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     [SerializeField] private bool drawBoundsGizmo = true;
     [SerializeField] private Color boundsGizmoColor = new Color(1.0f, 0.62f, 0.25f, 0.35f);
 
-    private static readonly int UseSceneSdfId = Shader.PropertyToID("_UseSceneSdf");
-    private static readonly int SdfSceneShapeCountId = Shader.PropertyToID("_SdfSceneShapeCount");
-    private static readonly int SdfSceneShapesId = Shader.PropertyToID("_SdfSceneShapes");
-    private static readonly int SdfSceneCutPlanesId = Shader.PropertyToID("_SdfSceneCutPlanes");
-
+    private readonly SdfSceneDataBuffer sceneDataBuffer = new SdfSceneDataBuffer();
     private SdfPhase1Driver volumeDriver;
     private Renderer cachedRenderer;
     private MaterialPropertyBlock propertyBlock;
-    private ComputeBuffer sceneShapeBuffer;
-    private ComputeBuffer sceneCutPlaneBuffer;
 
     public SdfPhase1Driver VolumeDriver => volumeDriver;
     public bool AutoFitBounds
@@ -87,16 +79,17 @@ public class SdfSharedVolumeProxy : MonoBehaviour
 
     private void OnDisable()
     {
-        ReleaseBuffers();
+        ReleaseSceneData();
     }
 
     private void OnDestroy()
     {
-        ReleaseBuffers();
+        ReleaseSceneData();
     }
 
     public void SetSurfaceDrivers(SdfPhase1Driver[] drivers)
     {
+        CacheComponents();
         surfaceDrivers = drivers ?? Array.Empty<SdfPhase1Driver>();
         UploadSceneSdfData();
     }
@@ -153,31 +146,13 @@ public class SdfSharedVolumeProxy : MonoBehaviour
             return;
         }
 
-        SdfPhase1Driver[] foundDrivers = FindObjectsByType<SdfPhase1Driver>(FindObjectsSortMode.None);
-        List<SdfPhase1Driver> filteredDrivers = new List<SdfPhase1Driver>(foundDrivers.Length);
-        for (int i = 0; i < foundDrivers.Length; i++)
-        {
-            SdfPhase1Driver driver = foundDrivers[i];
-            if (driver == null || driver == volumeDriver)
-            {
-                continue;
-            }
-
-            if (driver.GetComponent<SdfSharedVolumeProxy>() != null)
-            {
-                continue;
-            }
-
-            filteredDrivers.Add(driver);
-        }
-
-        surfaceDrivers = filteredDrivers.ToArray();
+        surfaceDrivers = SdfSceneDriverUtility.FindSurfaceDrivers(volumeDriver);
     }
 
     private void ApplyBounds()
     {
         Bounds volumeBounds;
-        if (autoFitBounds && TryGetSurfaceBounds(out Bounds surfaceBounds))
+        if (autoFitBounds && SdfSceneDriverUtility.TryGetCombinedBounds(surfaceDrivers, out Bounds surfaceBounds))
         {
             volumeBounds = surfaceBounds;
             volumeBounds.Expand(boundsPadding * 2.0f);
@@ -193,156 +168,15 @@ public class SdfSharedVolumeProxy : MonoBehaviour
         transform.localScale = safeSize;
     }
 
-    private bool TryGetSurfaceBounds(out Bounds combinedBounds)
-    {
-        combinedBounds = default;
-        bool hasBounds = false;
-        if (surfaceDrivers == null)
-        {
-            return false;
-        }
-
-        for (int i = 0; i < surfaceDrivers.Length; i++)
-        {
-            SdfPhase1Driver driver = surfaceDrivers[i];
-            if (driver == null)
-            {
-                continue;
-            }
-
-            Bounds driverBounds = driver.GetWorldBounds();
-            if (!hasBounds)
-            {
-                combinedBounds = driverBounds;
-                hasBounds = true;
-                continue;
-            }
-
-            combinedBounds.Encapsulate(driverBounds);
-        }
-
-        return hasBounds;
-    }
-
     private void UploadSceneSdfData()
     {
-        if (cachedRenderer == null)
-        {
-            return;
-        }
-
-        List<SdfSceneShapeGpu> shapeData = new List<SdfSceneShapeGpu>();
-        List<CutPlaneData> cutPlaneData = new List<CutPlaneData>();
-        float volumeScale = EstimateUniformScale(transform.lossyScale);
-
-        if (surfaceDrivers != null)
-        {
-            for (int i = 0; i < surfaceDrivers.Length; i++)
-            {
-                SdfPhase1Driver driver = surfaceDrivers[i];
-                if (driver == null)
-                {
-                    continue;
-                }
-
-                CutPlaneData[] cuts = GetCutPlanes(driver);
-                int cutStart = cutPlaneData.Count;
-                cutPlaneData.AddRange(cuts);
-
-                float driverScale = EstimateUniformScale(driver.transform.lossyScale);
-                float distanceScale = driverScale / Mathf.Max(volumeScale, 1e-4f);
-                Matrix4x4 worldToObject = driver.transform.worldToLocalMatrix;
-                shapeData.Add(new SdfSceneShapeGpu
-                {
-                    worldToObjectRow0 = worldToObject.GetRow(0),
-                    worldToObjectRow1 = worldToObject.GetRow(1),
-                    worldToObjectRow2 = worldToObject.GetRow(2),
-                    sphereCenterRadius = new Vector4(
-                        driver.SphereCenter.x,
-                        driver.SphereCenter.y,
-                        driver.SphereCenter.z,
-                        driver.SphereRadius),
-                    boxExtentsShapeMode = new Vector4(
-                        driver.BoxExtents.x,
-                        driver.BoxExtents.y,
-                        driver.BoxExtents.z,
-                        (float)driver.CurrentShapeMode),
-                    baseCutPlane = new Vector4(
-                        driver.BaseCutPlaneNormal.x,
-                        driver.BaseCutPlaneNormal.y,
-                        driver.BaseCutPlaneNormal.z,
-                        driver.BaseCutPlaneOffset),
-                    cutRangeAndDistanceScale = new Vector4(cutStart, cuts.Length, distanceScale, 0.0f)
-                });
-            }
-        }
-
-        EnsureBuffer(ref sceneShapeBuffer, Mathf.Max(shapeData.Count, 1), SdfSceneShapeGpu.Stride);
-        EnsureBuffer(ref sceneCutPlaneBuffer, Mathf.Max(cutPlaneData.Count, 1), CutPlaneData.Stride);
-
-        if (shapeData.Count > 0)
-        {
-            sceneShapeBuffer.SetData(shapeData.ToArray());
-        }
-
-        if (cutPlaneData.Count > 0)
-        {
-            sceneCutPlaneBuffer.SetData(cutPlaneData.ToArray());
-        }
-
-        cachedRenderer.GetPropertyBlock(propertyBlock);
-        propertyBlock.SetFloat(UseSceneSdfId, shapeData.Count > 0 ? 1.0f : 0.0f);
-        propertyBlock.SetInt(SdfSceneShapeCountId, shapeData.Count);
-        if (shapeData.Count > 0)
-        {
-            propertyBlock.SetBuffer(SdfSceneShapesId, sceneShapeBuffer);
-            propertyBlock.SetBuffer(SdfSceneCutPlanesId, sceneCutPlaneBuffer);
-        }
-
-        cachedRenderer.SetPropertyBlock(propertyBlock);
+        CacheComponents();
+        sceneDataBuffer.Upload(cachedRenderer, transform, surfaceDrivers, propertyBlock);
     }
 
-    private static CutPlaneData[] GetCutPlanes(SdfPhase1Driver driver)
+    private void ReleaseSceneData()
     {
-        SdfCutPlaneBufferController cutPlaneBufferController = driver.GetComponent<SdfCutPlaneBufferController>();
-        return cutPlaneBufferController != null
-            ? cutPlaneBufferController.GetUploadedPlanesCopy()
-            : Array.Empty<CutPlaneData>();
-    }
-
-    private static void EnsureBuffer(ref ComputeBuffer buffer, int count, int stride)
-    {
-        if (buffer != null && buffer.count >= count && buffer.stride == stride)
-        {
-            return;
-        }
-
-        if (buffer != null)
-        {
-            buffer.Release();
-        }
-
-        buffer = new ComputeBuffer(count, stride, ComputeBufferType.Structured);
-    }
-
-    private void ReleaseBuffers()
-    {
-        if (sceneShapeBuffer != null)
-        {
-            sceneShapeBuffer.Release();
-            sceneShapeBuffer = null;
-        }
-
-        if (sceneCutPlaneBuffer != null)
-        {
-            sceneCutPlaneBuffer.Release();
-            sceneCutPlaneBuffer = null;
-        }
-    }
-
-    private static float EstimateUniformScale(Vector3 scale)
-    {
-        return Mathf.Max((Mathf.Abs(scale.x) + Mathf.Abs(scale.y) + Mathf.Abs(scale.z)) / 3.0f, 1e-4f);
+        sceneDataBuffer.Dispose();
     }
 
     private static Vector3 MaxComponents(Vector3 value, Vector3 minValue)
@@ -363,19 +197,5 @@ public class SdfSharedVolumeProxy : MonoBehaviour
         Gizmos.color = boundsGizmoColor;
         Gizmos.matrix = Matrix4x4.TRS(transform.position, transform.rotation, transform.lossyScale);
         Gizmos.DrawWireCube(Vector3.zero, Vector3.one);
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct SdfSceneShapeGpu
-    {
-        public Vector4 worldToObjectRow0;
-        public Vector4 worldToObjectRow1;
-        public Vector4 worldToObjectRow2;
-        public Vector4 sphereCenterRadius;
-        public Vector4 boxExtentsShapeMode;
-        public Vector4 baseCutPlane;
-        public Vector4 cutRangeAndDistanceScale;
-
-        public const int Stride = 112;
     }
 }

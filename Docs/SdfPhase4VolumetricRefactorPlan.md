@@ -123,6 +123,16 @@ visibility = lerp(1.0, visibility, VolumeLightShadowStrength);
 
 这个结构让体积雾只被积分一次，同时体积阴影仍然读取所有切片的 SDF 数据。
 
+### I：Scene SDF 数据入口拆分
+
+为了后续接入独立体积 pass、mesh SDF、SDF atlas 和 compute culling，当前把共享体积盒里的数据职责拆成两层：
+
+- `SdfSceneDriverUtility`：只负责发现当前场景里的普通 SDF surface drivers，并计算它们的 combined bounds。
+- `SdfSceneDataBuffer`：只负责把 surface drivers 打包成 shader 需要的 `_SdfSceneShapes` / `_SdfSceneCutPlanes`，并管理 ComputeBuffer 生命周期。
+- `SdfSharedVolumeProxy`：现在只负责体积 proxy 的 bounds、渲染排序和把 scene data 绑定到自身 renderer。
+
+这次拆分不改变视觉算法，只把“谁提供 SDF scene 数据”和“谁渲染体积盒”解耦。后续如果改成 fullscreen/RenderFeature 体积 pass，或把 analytic shape 换成 3D texture SDF，优先替换 `SdfSceneDataBuffer` 的数据来源即可。
+
 ## SdfSandbox 默认状态
 
 `Assets/Scenes/SdfSandbox.unity` 已挂好需要的脚本和参数：

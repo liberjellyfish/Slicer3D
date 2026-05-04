@@ -771,27 +771,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
 
     private void RefreshDrivers()
     {
-        SdfPhase1Driver[] foundDrivers = Object.FindObjectsByType<SdfPhase1Driver>(FindObjectsSortMode.None);
-        if (foundDrivers == null || foundDrivers.Length <= 0)
-        {
-            return;
-        }
-
-        List<SdfPhase1Driver> runtimeDrivers = new List<SdfPhase1Driver>(foundDrivers.Length);
-        for (int i = 0; i < foundDrivers.Length; i++)
-        {
-            if (foundDrivers[i] != null && foundDrivers[i].gameObject.scene.IsValid())
-            {
-                if (foundDrivers[i].GetComponent<SdfSharedVolumeProxy>() != null)
-                {
-                    continue;
-                }
-
-                runtimeDrivers.Add(foundDrivers[i]);
-            }
-        }
-
-        sdfDrivers = runtimeDrivers.ToArray();
+        sdfDrivers = SdfSceneDriverUtility.FindSurfaceDrivers();
     }
 
     private void RefreshDustRoot()
