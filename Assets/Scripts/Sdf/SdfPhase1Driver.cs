@@ -20,7 +20,11 @@ public class SdfPhase1Driver : MonoBehaviour
         CutDominance = 3,
         MainLightShadow = 4,
         SdfSoftShadow = 5,
-        TotalShadow = 6
+        TotalShadow = 6,
+        VolumeDensity = 7,
+        VolumeTransmittance = 8,
+        VolumeShadow = 9,
+        VolumeLight = 10
     }
 
     [Header("Shape")]
@@ -65,6 +69,23 @@ public class SdfPhase1Driver : MonoBehaviour
     [SerializeField] [Range(0.0f, 2.0f)] private float cutFaceEdgeBoost = 0.35f;
     [SerializeField] [Range(0.0f, 2.0f)] private float cutFaceFreshnessBoost = 0.3f;
 
+    [Header("Volume Lighting")]
+    [SerializeField] private bool volumeLightEnabled = false;
+    [SerializeField] [Range(0.0f, 8.0f)] private float volumeLightIntensity = 3.0f;
+    [SerializeField] [Range(0.0f, 8.0f)] private float volumeLightDensity = 1.4f;
+    [SerializeField] [Range(-0.8f, 0.8f)] private float volumeLightAnisotropy = 0.15f;
+    [SerializeField] [Range(4, 32)] private int volumeLightSamples = 20;
+    [SerializeField] [Min(0.05f)] private float volumeLightMaxDistance = 1.2f;
+    [SerializeField] [Range(0.0f, 1.0f)] private float volumeLightShadowStrength = 0.75f;
+    [SerializeField] [Min(0.0001f)] private float volumeLightShadowBias = 0.01f;
+    [SerializeField] [Min(0.01f)] private float volumeLightSurfaceFadeDistance = 0.16f;
+    [SerializeField] [Min(0.01f)] private float volumeLightPlaneBand = 0.16f;
+    [SerializeField] [Min(0.01f)] private float volumeLightRemovedDepth = 0.28f;
+    [SerializeField] [Min(0.01f)] private float volumeLightShapeDepth = 0.24f;
+    [SerializeField] [Min(0.1f)] private float volumeLightNoiseScale = 4.0f;
+    [SerializeField] [Range(0.0f, 1.0f)] private float volumeLightNoiseStrength = 0.18f;
+    [SerializeField] [Min(0.0f)] private float volumeLightNoiseDrift = 0.2f;
+
     [Header("Debug")]
     [SerializeField] private DebugViewMode debugView = DebugViewMode.Lighting;
 
@@ -93,6 +114,21 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int CutFaceEdgeWidthId = Shader.PropertyToID("_CutFaceEdgeWidth");
     private static readonly int CutFaceEdgeBoostId = Shader.PropertyToID("_CutFaceEdgeBoost");
     private static readonly int CutFaceFreshnessBoostId = Shader.PropertyToID("_CutFaceFreshnessBoost");
+    private static readonly int VolumeLightEnabledId = Shader.PropertyToID("_VolumeLightEnabled");
+    private static readonly int VolumeLightIntensityId = Shader.PropertyToID("_VolumeLightIntensity");
+    private static readonly int VolumeLightDensityId = Shader.PropertyToID("_VolumeLightDensity");
+    private static readonly int VolumeLightAnisotropyId = Shader.PropertyToID("_VolumeLightAnisotropy");
+    private static readonly int VolumeLightSamplesId = Shader.PropertyToID("_VolumeLightSamples");
+    private static readonly int VolumeLightMaxDistanceId = Shader.PropertyToID("_VolumeLightMaxDistance");
+    private static readonly int VolumeLightShadowStrengthId = Shader.PropertyToID("_VolumeLightShadowStrength");
+    private static readonly int VolumeLightShadowBiasId = Shader.PropertyToID("_VolumeLightShadowBias");
+    private static readonly int VolumeLightSurfaceFadeDistanceId = Shader.PropertyToID("_VolumeLightSurfaceFadeDistance");
+    private static readonly int VolumeLightPlaneBandId = Shader.PropertyToID("_VolumeLightPlaneBand");
+    private static readonly int VolumeLightRemovedDepthId = Shader.PropertyToID("_VolumeLightRemovedDepth");
+    private static readonly int VolumeLightShapeDepthId = Shader.PropertyToID("_VolumeLightShapeDepth");
+    private static readonly int VolumeLightNoiseScaleId = Shader.PropertyToID("_VolumeLightNoiseScale");
+    private static readonly int VolumeLightNoiseStrengthId = Shader.PropertyToID("_VolumeLightNoiseStrength");
+    private static readonly int VolumeLightNoiseDriftId = Shader.PropertyToID("_VolumeLightNoiseDrift");
     private static readonly int MaxStepsId = Shader.PropertyToID("_MaxSteps");
     private static readonly int MaxDistanceId = Shader.PropertyToID("_MaxDistance");
     private static readonly int HitEpsilonId = Shader.PropertyToID("_HitEpsilon");
@@ -151,6 +187,13 @@ public class SdfPhase1Driver : MonoBehaviour
         }
     }
 
+    public void SetDebugView(DebugViewMode mode)
+    {
+        debugView = mode;
+        CacheComponents();
+        ApplyProperties();
+    }
+
     private void ApplyProperties()
     {
         if (cachedRenderer == null || cachedMeshFilter == null)
@@ -193,6 +236,21 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(CutFaceEdgeWidthId, cutFaceEdgeWidth);
         propertyBlock.SetFloat(CutFaceEdgeBoostId, cutFaceEdgeBoost);
         propertyBlock.SetFloat(CutFaceFreshnessBoostId, cutFaceFreshnessBoost);
+        propertyBlock.SetFloat(VolumeLightEnabledId, volumeLightEnabled ? 1.0f : 0.0f);
+        propertyBlock.SetFloat(VolumeLightIntensityId, volumeLightIntensity);
+        propertyBlock.SetFloat(VolumeLightDensityId, volumeLightDensity);
+        propertyBlock.SetFloat(VolumeLightAnisotropyId, volumeLightAnisotropy);
+        propertyBlock.SetFloat(VolumeLightSamplesId, volumeLightSamples);
+        propertyBlock.SetFloat(VolumeLightMaxDistanceId, volumeLightMaxDistance);
+        propertyBlock.SetFloat(VolumeLightShadowStrengthId, volumeLightShadowStrength);
+        propertyBlock.SetFloat(VolumeLightShadowBiasId, volumeLightShadowBias);
+        propertyBlock.SetFloat(VolumeLightSurfaceFadeDistanceId, volumeLightSurfaceFadeDistance);
+        propertyBlock.SetFloat(VolumeLightPlaneBandId, volumeLightPlaneBand);
+        propertyBlock.SetFloat(VolumeLightRemovedDepthId, volumeLightRemovedDepth);
+        propertyBlock.SetFloat(VolumeLightShapeDepthId, volumeLightShapeDepth);
+        propertyBlock.SetFloat(VolumeLightNoiseScaleId, volumeLightNoiseScale);
+        propertyBlock.SetFloat(VolumeLightNoiseStrengthId, volumeLightNoiseStrength);
+        propertyBlock.SetFloat(VolumeLightNoiseDriftId, volumeLightNoiseDrift);
         propertyBlock.SetFloat(DebugViewId, (float)debugView);
         propertyBlock.SetFloat(MaxStepsId, maxSteps);
         propertyBlock.SetFloat(MaxDistanceId, maxDistance);

@@ -21,6 +21,9 @@ public class SdfSliceManager : MonoBehaviour
     [SerializeField] private OrbitFocusAnchor orbitFocusAnchor;
     [SerializeField] private bool updateOrbitFocusDuringSeparation = true;
 
+    [Header("Validation")]
+    [SerializeField] private SdfCutDustFieldController cutDustFieldController;
+
     [Header("Debug")]
     [SerializeField] private bool showDebugGizmos = true;
     [SerializeField] private Color debugGizmoColor = Color.cyan;
@@ -90,6 +93,14 @@ public class SdfSliceManager : MonoBehaviour
 
             if (target.TrySplit(slicePlane, out SdfSliceablePiece positivePiece, out SdfSliceablePiece negativePiece))
             {
+                if (cutDustFieldController != null)
+                {
+                    cutDustFieldController.EmitForCut(
+                        slicePlane,
+                        positivePiece != null ? positivePiece.transform : null,
+                        negativePiece != null ? negativePiece.transform : null);
+                }
+
                 UpdateOrbitFocus(positivePiece != null ? positivePiece.transform : null,
                     negativePiece != null ? negativePiece.transform : null);
 

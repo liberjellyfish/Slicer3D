@@ -30,6 +30,23 @@ Shader "Custom/Sdf/Phase1Raymarch"
         _CutFaceEdgeBoost ("Cut Face Edge Boost", Range(0.0, 2.0)) = 0.35
         _CutFaceFreshnessBoost ("Cut Face Freshness Boost", Range(0.0, 2.0)) = 0.3
 
+        [Header(Volume Lighting)]
+        _VolumeLightEnabled ("Volume Light Enabled", Range(0.0, 1.0)) = 0.0
+        _VolumeLightIntensity ("Volume Light Intensity", Range(0.0, 8.0)) = 3.0
+        _VolumeLightDensity ("Volume Light Density", Range(0.0, 8.0)) = 1.4
+        _VolumeLightAnisotropy ("Volume Light Anisotropy", Range(-0.8, 0.8)) = 0.15
+        _VolumeLightSamples ("Volume Light Samples", Range(4, 32)) = 20
+        _VolumeLightMaxDistance ("Volume Light Max Distance", Float) = 1.2
+        _VolumeLightShadowStrength ("Volume Light Shadow Strength", Range(0.0, 1.0)) = 0.75
+        _VolumeLightShadowBias ("Volume Light Shadow Bias", Float) = 0.01
+        _VolumeLightSurfaceFadeDistance ("Volume Light Surface Fade Distance", Float) = 0.16
+        _VolumeLightPlaneBand ("Volume Light Plane Band", Float) = 0.16
+        _VolumeLightRemovedDepth ("Volume Light Removed Depth", Float) = 0.28
+        _VolumeLightShapeDepth ("Volume Light Shape Depth", Float) = 0.24
+        _VolumeLightNoiseScale ("Volume Light Noise Scale", Float) = 4.0
+        _VolumeLightNoiseStrength ("Volume Light Noise Strength", Range(0.0, 1.0)) = 0.18
+        _VolumeLightNoiseDrift ("Volume Light Noise Drift", Float) = 0.2
+
         [Header(Ray Marching)]
         _MaxSteps ("Max Steps", Range(8, 256)) = 96
         _MaxDistance ("Max Distance", Float) = 8.0
@@ -49,7 +66,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
         [HideInInspector] _ProxyBoundsMax ("Proxy Bounds Max", Vector) = (0.5, 0.5, 0.5, 0.0)
 
         [Header(Debug)]
-        _DebugView ("Debug View", Range(0, 6)) = 0
+        _DebugView ("Debug View", Range(0, 10)) = 0
     }
 
     SubShader
@@ -120,6 +137,15 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float totalShadow;
             };
 
+            struct SdfVolumeTerms
+            {
+                float3 scattering;
+                float transmittance;
+                float debugValue;
+                float densityDebug;
+                float shadowDebug;
+            };
+
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseColor;
                 float _AmbientStrength;
@@ -143,6 +169,21 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float _CutFaceEdgeWidth;
                 float _CutFaceEdgeBoost;
                 float _CutFaceFreshnessBoost;
+                float _VolumeLightEnabled;
+                float _VolumeLightIntensity;
+                float _VolumeLightDensity;
+                float _VolumeLightAnisotropy;
+                float _VolumeLightSamples;
+                float _VolumeLightMaxDistance;
+                float _VolumeLightShadowStrength;
+                float _VolumeLightShadowBias;
+                float _VolumeLightSurfaceFadeDistance;
+                float _VolumeLightPlaneBand;
+                float _VolumeLightRemovedDepth;
+                float _VolumeLightShapeDepth;
+                float _VolumeLightNoiseScale;
+                float _VolumeLightNoiseStrength;
+                float _VolumeLightNoiseDrift;
                 float _MaxSteps;
                 float _MaxDistance;
                 float _HitEpsilon;
@@ -233,6 +274,34 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return ApplyCutPlanes(p, BaseShapeMap(p));
             }
 
+            bool EvaluateDominantCutPlane(float3 p, out float dominantHalfSpace, out float dominantPlaneDistance, out float3 dominantNormalOS)
+            {
+                dominantHalfSpace = -1e20;
+                dominantPlaneDistance = 1e20;
+                dominantNormalOS = float3(0.0, 1.0, 0.0);
+
+                if (_CutPlaneCount <= 0)
+                {
+                    return false;
+                }
+
+                [loop]
+                for (int i = 0; i < _CutPlaneCount; i++)
+                {
+                    float planeSdf = dot(p, _CutPlanes[i].normal) + _CutPlanes[i].distance;
+                    float halfSpaceSdf = -(planeSdf * _CutPlanes[i].sideSign);
+
+                    if (halfSpaceSdf > dominantHalfSpace)
+                    {
+                        dominantHalfSpace = halfSpaceSdf;
+                        dominantPlaneDistance = planeSdf;
+                        dominantNormalOS = normalize(-_CutPlanes[i].normal * _CutPlanes[i].sideSign);
+                    }
+                }
+
+                return true;
+            }
+
             SdfSurfaceData EvaluateSurfaceData(float3 p)
             {
                 SdfSurfaceData surfaceData;
@@ -247,30 +316,17 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 surfaceData.dominantPlaneDistance = 1e20;
                 surfaceData.dominantHalfSpace = -1e20;
 
-                float dominantHalfSpace = -1e20;
-                float3 dominantNormalOS = float3(0.0, 1.0, 0.0);
-                float dominantPlaneDistance = 1e20;
+                float dominantHalfSpace;
+                float3 dominantNormalOS;
+                float dominantPlaneDistance;
+                bool hasCutPlane = EvaluateDominantCutPlane(p, dominantHalfSpace, dominantPlaneDistance, dominantNormalOS);
 
-                [loop]
-                for (int i = 0; i < _CutPlaneCount; i++)
-                {
-                    float planeSdf = dot(p, _CutPlanes[i].normal) + _CutPlanes[i].distance;
-                    float halfSpaceSdf = -(planeSdf * _CutPlanes[i].sideSign);
-
-                    if (halfSpaceSdf > dominantHalfSpace)
-                    {
-                        dominantHalfSpace = halfSpaceSdf;
-                        dominantNormalOS = normalize(-_CutPlanes[i].normal * _CutPlanes[i].sideSign);
-                        dominantPlaneDistance = planeSdf;
-                    }
-                }
-
-                surfaceData.finalDistance = _CutPlaneCount > 0
+                surfaceData.finalDistance = hasCutPlane
                     ? max(surfaceData.baseDistance, dominantHalfSpace)
                     : surfaceData.baseDistance;
                 surfaceData.dominantHalfSpace = dominantHalfSpace;
 
-                if (_CutPlaneCount <= 0)
+                if (!hasCutPlane)
                 {
                     return surfaceData;
                 }
@@ -384,6 +440,139 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return saturate(shadow);
             }
 
+            float SampleMainLightShadow(float3 positionWS)
+            {
+                float4 shadowCoord = TransformWorldToShadowCoord(positionWS);
+                Light lightAtPoint = GetMainLight(shadowCoord);
+                return lerp(1.0, lightAtPoint.shadowAttenuation, saturate(_ReceiveMainLightShadowStrength));
+            }
+
+            float EvaluateScatteringPhase(float3 lightDirWS, float3 viewDirWS)
+            {
+                float g = clamp(_VolumeLightAnisotropy, -0.8, 0.8);
+                float g2 = g * g;
+                float cosTheta = clamp(dot(-lightDirWS, viewDirWS), -1.0, 1.0);
+                float denom = pow(max(1.0 + g2 - 2.0 * g * cosTheta, 1e-3), 1.5);
+                return (1.0 - g2) / (12.56637061 * denom);
+            }
+
+            float Hash13(float3 p)
+            {
+                p = frac(p * 0.1031);
+                p += dot(p, p.zyx + 31.32);
+                return frac((p.x + p.y) * p.z);
+            }
+
+            float ValueNoise3D(float3 p)
+            {
+                float3 i = floor(p);
+                float3 f = frac(p);
+                float3 u = f * f * (3.0 - 2.0 * f);
+
+                float n000 = Hash13(i + float3(0.0, 0.0, 0.0));
+                float n100 = Hash13(i + float3(1.0, 0.0, 0.0));
+                float n010 = Hash13(i + float3(0.0, 1.0, 0.0));
+                float n110 = Hash13(i + float3(1.0, 1.0, 0.0));
+                float n001 = Hash13(i + float3(0.0, 0.0, 1.0));
+                float n101 = Hash13(i + float3(1.0, 0.0, 1.0));
+                float n011 = Hash13(i + float3(0.0, 1.0, 1.0));
+                float n111 = Hash13(i + float3(1.0, 1.0, 1.0));
+
+                float nx00 = lerp(n000, n100, u.x);
+                float nx10 = lerp(n010, n110, u.x);
+                float nx01 = lerp(n001, n101, u.x);
+                float nx11 = lerp(n011, n111, u.x);
+                float nxy0 = lerp(nx00, nx10, u.y);
+                float nxy1 = lerp(nx01, nx11, u.y);
+                return lerp(nxy0, nxy1, u.z);
+            }
+
+            void GetParticipatingMedia(float3 samplePositionOS, out float sigmaS, out float sigmaE, out float densityDebug)
+            {
+                float finalDistance = Map(samplePositionOS);
+                float shapeBand = 1.0 - smoothstep(0.0, max(_VolumeLightShapeDepth, _HitEpsilon), max(finalDistance, 0.0));
+                float cutBand = 0.0;
+
+                float dominantHalfSpace;
+                float dominantPlaneDistance;
+                float3 dominantNormalOS;
+                if (EvaluateDominantCutPlane(samplePositionOS, dominantHalfSpace, dominantPlaneDistance, dominantNormalOS))
+                {
+                    float baseDistance = BaseShapeMap(samplePositionOS);
+                    float planeBand = 1.0 - smoothstep(0.0, max(_VolumeLightPlaneBand, _HitEpsilon), abs(dominantPlaneDistance));
+                    float originalInterior = saturate((-baseDistance) / max(_VolumeLightRemovedDepth, _HitEpsilon));
+                    float removedSide = smoothstep(0.0, max(_VolumeLightRemovedDepth, _HitEpsilon), dominantHalfSpace);
+                    cutBand = planeBand * originalInterior * lerp(0.65, 1.0, removedSide);
+                }
+
+                float3 noisePosition = samplePositionOS * _VolumeLightNoiseScale;
+                noisePosition += float3(0.37, 0.19, 0.53) * (_Time.y * _VolumeLightNoiseDrift);
+                float noiseValue = ValueNoise3D(noisePosition);
+                float noiseMask = lerp(1.0, 0.65 + noiseValue * 0.7, saturate(_VolumeLightNoiseStrength));
+
+                float baseFog = 0.035;
+                float density = (baseFog + shapeBand * 0.35 + cutBand * 1.25) * noiseMask;
+                densityDebug = saturate(density);
+
+                sigmaS = max(0.0, density * _VolumeLightDensity);
+                sigmaE = max(1e-5, sigmaS);
+            }
+
+            float EvaluateVolumeLightTransmittance(float3 samplePositionOS, float3 lightDirOS)
+            {
+                if (_VolumeLightShadowStrength <= 0.0)
+                {
+                    return 1.0;
+                }
+
+                float shadowBias = max(_VolumeLightShadowBias, _HitEpsilon);
+                float3 shadowOriginOS = samplePositionOS + lightDirOS * shadowBias;
+
+                float lightTEnter;
+                float lightTExit;
+                if (!IntersectProxyBounds(shadowOriginOS, lightDirOS, lightTEnter, lightTExit))
+                {
+                    return 1.0;
+                }
+
+                float maxShadowDistance = min(max(_SdfSoftShadowDistance, _VolumeLightMaxDistance), max(lightTExit, 0.0));
+                if (maxShadowDistance <= _HitEpsilon)
+                {
+                    return 1.0;
+                }
+
+                int shadowStepCount = min(max((int)_VolumeLightSamples, 4), 24);
+                float stepLength = maxShadowDistance / shadowStepCount;
+                float transmittance = 1.0;
+
+                [loop]
+                for (int stepIndex = 0; stepIndex < shadowStepCount; stepIndex++)
+                {
+                    float sampleT = (stepIndex + 0.5) * stepLength;
+                    float3 p = shadowOriginOS + lightDirOS * sampleT;
+                    float geometryDistance = Map(p);
+
+                    if (geometryDistance < _HitEpsilon)
+                    {
+                        transmittance = 0.0;
+                        break;
+                    }
+
+                    float sigmaS;
+                    float sigmaE;
+                    float densityDebug;
+                    GetParticipatingMedia(p, sigmaS, sigmaE, densityDebug);
+                    transmittance *= exp(-sigmaE * stepLength);
+
+                    if (transmittance < 0.01)
+                    {
+                        break;
+                    }
+                }
+
+                return lerp(1.0, saturate(transmittance), saturate(_VolumeLightShadowStrength));
+            }
+
             SdfShadowTerms EvaluateShadowTerms(
                 float3 hitPositionOS,
                 float3 normalOS,
@@ -453,7 +642,87 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return ambient + diffuse + edgeAccent;
             }
 
-            float3 EvaluateDebugView(SdfSurfaceData surfaceData, float3 normalWS, SdfShadowTerms shadowTerms)
+            SdfVolumeTerms EvaluateVolumeLighting(
+                float3 rayOriginOS,
+                float3 rayDirOS,
+                float3 rayDirWS,
+                float tEnter,
+                float hitDistance,
+                float3 mainLightDirWS,
+                float3 mainLightColor)
+            {
+                SdfVolumeTerms volumeTerms;
+                volumeTerms.scattering = 0.0;
+                volumeTerms.transmittance = 1.0;
+                volumeTerms.debugValue = 0.0;
+                volumeTerms.densityDebug = 0.0;
+                volumeTerms.shadowDebug = 1.0;
+
+                if (_VolumeLightEnabled <= 0.0 || _VolumeLightSamples < 1.0)
+                {
+                    return volumeTerms;
+                }
+
+                float segmentEnd = hitDistance;
+                float segmentStart = max(max(tEnter, 0.0), segmentEnd - max(_VolumeLightMaxDistance, _HitEpsilon));
+                float segmentLength = segmentEnd - segmentStart;
+                if (segmentLength <= _HitEpsilon)
+                {
+                    return volumeTerms;
+                }
+
+                int sampleCount = (int)_VolumeLightSamples;
+                float stepLength = segmentLength / sampleCount;
+                float3 viewDirWS = normalize(-rayDirWS);
+                float phase = EvaluateScatteringPhase(mainLightDirWS, viewDirWS);
+                float transmittance = 1.0;
+                float3 scatteredLight = float3(0.0, 0.0, 0.0);
+                float densityPeak = 0.0;
+                float shadowAccumulation = 0.0;
+                float contributingSamples = 0.0;
+                float3 lightDirOS = normalize(TransformWorldToObjectDir(mainLightDirWS));
+
+                [loop]
+                for (int sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++)
+                {
+                    float sampleT = segmentStart + (sampleIndex + 0.5) * stepLength;
+                    float3 samplePositionOS = rayOriginOS + rayDirOS * sampleT;
+                    float sigmaS;
+                    float sigmaE;
+                    float densityDebug;
+                    GetParticipatingMedia(samplePositionOS, sigmaS, sigmaE, densityDebug);
+
+                    if (sigmaS <= 1e-5)
+                    {
+                        continue;
+                    }
+
+                    float lightTransmittance = EvaluateVolumeLightTransmittance(samplePositionOS, lightDirOS);
+                    float segmentTransmittance = exp(-sigmaE * stepLength);
+                    float3 sourceRadiance = mainLightColor * (lightTransmittance * sigmaS * phase);
+                    float3 integratedScatter = sourceRadiance * (1.0 - segmentTransmittance) / sigmaE;
+
+                    scatteredLight += transmittance * integratedScatter;
+                    transmittance *= segmentTransmittance;
+                    densityPeak = max(densityPeak, densityDebug);
+                    shadowAccumulation += lightTransmittance;
+                    contributingSamples += 1.0;
+
+                    if (transmittance < 0.01)
+                    {
+                        break;
+                    }
+                }
+
+                volumeTerms.scattering = scatteredLight * _VolumeLightIntensity;
+                volumeTerms.transmittance = saturate(transmittance);
+                volumeTerms.densityDebug = densityPeak;
+                volumeTerms.shadowDebug = contributingSamples > 0.0 ? saturate(shadowAccumulation / contributingSamples) : 1.0;
+                volumeTerms.debugValue = saturate(densityPeak * 0.55 + (1.0 - volumeTerms.transmittance) * 0.3 + (1.0 - volumeTerms.shadowDebug) * 0.15);
+                return volumeTerms;
+            }
+
+            float3 EvaluateDebugView(SdfSurfaceData surfaceData, float3 normalWS, SdfShadowTerms shadowTerms, SdfVolumeTerms volumeTerms)
             {
                 int debugView = (int)round(_DebugView);
 
@@ -485,6 +754,26 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 if (debugView == 6)
                 {
                     return saturate(shadowTerms.totalShadow).xxx;
+                }
+
+                if (debugView == 7)
+                {
+                    return saturate(volumeTerms.densityDebug).xxx;
+                }
+
+                if (debugView == 8)
+                {
+                    return saturate(volumeTerms.transmittance).xxx;
+                }
+
+                if (debugView == 9)
+                {
+                    return saturate(volumeTerms.shadowDebug).xxx;
+                }
+
+                if (debugView == 10)
+                {
+                    return saturate(volumeTerms.debugValue).xxx;
                 }
 
                 return 0.0;
@@ -537,6 +826,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     clip(-1.0);
                 }
 
+                float hitDistance = t;
                 SdfSurfaceData surfaceData = EvaluateSurfaceData(hitPositionOS);
                 float3 estimatedNormalOS = EstimateNormalOS(hitPositionOS);
                 float3 normalOS = ResolveSurfaceNormalOS(estimatedNormalOS, surfaceData);
@@ -546,9 +836,19 @@ Shader "Custom/Sdf/Phase1Raymarch"
 
                 SdfShadowTerms shadowTerms;
                 float3 finalColor = EvaluateLighting(hitPositionOS, hitPositionWS, normalOS, normalWS, surfaceData, shadowTerms);
+                Light volumeLight = GetMainLight(TransformWorldToShadowCoord(hitPositionWS));
+                SdfVolumeTerms volumeTerms = EvaluateVolumeLighting(
+                    rayOriginOS,
+                    rayDirOS,
+                    rayDirWS,
+                    tEnter,
+                    hitDistance,
+                    normalize(volumeLight.direction),
+                    volumeLight.color);
+                finalColor = finalColor * volumeTerms.transmittance + volumeTerms.scattering;
                 if (_DebugView > 0.5)
                 {
-                    finalColor = EvaluateDebugView(surfaceData, normalWS, shadowTerms);
+                    finalColor = EvaluateDebugView(surfaceData, normalWS, shadowTerms, volumeTerms);
                 }
 
                 return half4(finalColor, 1.0);

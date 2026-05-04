@@ -130,6 +130,7 @@ GameObject:
   - component: {fileID: 91931938}
   - component: {fileID: 91931937}
   - component: {fileID: 91931939}
+  - component: {fileID: 91931940}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -227,8 +228,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Version: 3
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -240,6 +241,28 @@ MonoBehaviour:
   m_LightCookieSize: {x: 1, y: 1}
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 0
+--- !u!114 &91931940
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 91931936}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6788262aca2311647a9379d7ccf42672, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  animateInPlayMode: 1
+  rotateYaw: 1
+  yawSpeed: 18
+  oscillatePitch: 1
+  pitchAmplitude: 18
+  pitchFrequency: 0.12
+  pulseIntensity: 1
+  minIntensity: 0.9
+  maxIntensity: 1.8
+  pulseFrequency: 0.2
 --- !u!1 &286169586
 GameObject:
   m_ObjectHideFlags: 0
@@ -267,8 +290,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 75329189b2d166040b2dd6013d7931d6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   initialFocusSource: {fileID: 0}
   sourceOffset: {x: 0, y: 0, z: 0}
   initializeOnEnable: 1
@@ -287,6 +310,61 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!21 &437714169
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: SdfValidationBackdropMaterial
+  m_Shader: {fileID: 4800000, guid: 650dd9526735d5b46b79224bc6e94025, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap:
+    RenderType: Opaque
+  disabledShaderPasses:
+  - MOTIONVECTORS
+  m_LockedProperties:
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _BaseMap:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MainTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - _AddPrecomputedVelocity: 0
+    - _AlphaClip: 0
+    - _AlphaToMask: 0
+    - _Blend: 0
+    - _BlendOp: 0
+    - _Cull: 2
+    - _Cutoff: 0.5
+    - _DstBlend: 0
+    - _DstBlendAlpha: 0
+    - _QueueOffset: 0
+    - _SampleGI: 0
+    - _SrcBlend: 1
+    - _SrcBlendAlpha: 1
+    - _Surface: 0
+    - _ZWrite: 1
+    m_Colors:
+    - _BaseColor: {r: 0.28, g: 0.29, b: 0.32, a: 1}
+    - _Color: {r: 0.27999997, g: 0.28999996, b: 0.31999996, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
 --- !u!1 &1109503982
 GameObject:
   m_ObjectHideFlags: 0
@@ -391,8 +469,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a79441f348de89743a2939f4d699eac1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_RenderShadows: 1
   m_RequiresDepthTextureOption: 2
   m_RequiresOpaqueTextureOption: 2
@@ -435,8 +513,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1aea84fc922c4ca40b624be8deace930, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   target: {fileID: 286169588}
   targetOffset: {x: 0, y: 0, z: 0}
   autoInitializeFromCurrentTransform: 1
@@ -457,6 +535,115 @@ MonoBehaviour:
   rotateUpKey: 119
   rotateDownKey: 115
   resetKey: 114
+--- !u!1 &1412337070
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1412337074}
+  - component: {fileID: 1412337073}
+  - component: {fileID: 1412337072}
+  - component: {fileID: 1412337071}
+  m_Layer: 0
+  m_Name: SdfValidationBackdrop
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!23 &1412337071
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412337070}
+  m_Enabled: 0
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_StaticShadowCaster: 0
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
+  m_RayTracingAccelStructBuildFlagsOverride: 0
+  m_RayTracingAccelStructBuildFlags: 1
+  m_SmallMeshCulling: 1
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 437714169}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 1
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_AdditionalVertexStreams: {fileID: 0}
+--- !u!64 &1412337072
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412337070}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 30
+  m_Mesh: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!33 &1412337073
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412337070}
+  m_Mesh: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!4 &1412337074
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1412337070}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 5.5}
+  m_LocalScale: {x: 8, y: 8, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1570979120}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1570979115
 GameObject:
   m_ObjectHideFlags: 0
@@ -470,6 +657,8 @@ GameObject:
   - component: {fileID: 1570979118}
   - component: {fileID: 1570979117}
   - component: {fileID: 1570979116}
+  - component: {fileID: 1570979121}
+  - component: {fileID: 1570979122}
   m_Layer: 0
   m_Name: SdfSlicerSystem
   m_TagString: Untagged
@@ -487,8 +676,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2054363eddc6a5441b8f070f4152bbf4, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   visualDistance: 5
   lineWidth: 0.03
 --- !u!120 &1570979117
@@ -608,8 +797,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 23313a318a646b3428bdd9f9745311f5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   sliceableLayer:
     serializedVersion: 2
     m_Bits: 64
@@ -620,6 +809,7 @@ MonoBehaviour:
   separationDuration: 0.15
   orbitFocusAnchor: {fileID: 286169587}
   updateOrbitFocusDuringSeparation: 1
+  cutDustFieldController: {fileID: 1570979121}
   showDebugGizmos: 1
   debugGizmoColor: {r: 0, g: 1, b: 1, a: 1}
 --- !u!114 &1570979119
@@ -632,8 +822,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d8aa688b3b1e788439a77904a9edb18d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
 --- !u!4 &1570979120
 Transform:
   m_ObjectHideFlags: 0
@@ -646,9 +836,70 @@ Transform:
   m_LocalPosition: {x: -0.84188193, y: -0.38631794, z: 0.65574956}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 1412337074}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1570979121
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1570979115}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 375e2ffa80b12bd4a83fd474294885dc, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  enableDustField: 0
+  keepOnlyLatestField: 1
+  fieldSizeMultiplier: 1.1
+  fieldThickness: 0.18
+  fieldPadding: 0.05
+  burstCount: 96
+  particleLifetime: 5
+  particleStartSpeed: 0.04
+  particleStartSize: 0.03
+  particleColor: {r: 1, g: 0.97, b: 0.9, a: 0.12}
+  noiseStrength: 0.2
+  dustRoot: {fileID: 0}
+--- !u!114 &1570979122
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1570979115}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 15625ff8e4b242d4daa70b5aae0f4aaa, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  directionalLight: {fileID: 91931937}
+  lightingValidationRig: {fileID: 91931940}
+  backdropRenderer: {fileID: 1412337071}
+  dustVisualizationRoot: {fileID: 0}
+  sdfDrivers:
+  - {fileID: 1680505283}
+  validationMode: 0
+  applyOnEnable: 1
+  applyOnValidate: 1
+  normalAmbientIntensity: 1
+  validationAmbientIntensity: 0.35
+  normalLightIntensity: 1
+  validationLightIntensity: 1.45
+  normalLightColor: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
+  validationLightColor: {r: 0.97, g: 0.97, b: 1, a: 1}
+  useValidationCookie: 1
+  cookieEdgeSoftness: 0.72
+  cookieCenterBias: 0.35
+  cookieResolution: 128
+  showBackdropInValidationModes: 1
+  normalBackdropColor: {r: 0.28, g: 0.29, b: 0.32, a: 1}
+  validationBackdropColor: {r: 0.12, g: 0.14, b: 0.18, a: 1}
+  animateLightInValidationModes: 1
+  pulseLightIntensityInVolumeMode: 0
 --- !u!1 &1680505278
 GameObject:
   m_ObjectHideFlags: 0
@@ -770,8 +1021,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c52e07e5e65b922418cc371488b160d0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   shapeMode: 0
   sphereCenter: {x: 0, y: 0, z: 0}
   sphereRadius: 0.33
@@ -792,13 +1043,34 @@ MonoBehaviour:
   sdfSoftShadowStart: 0.01
   sdfSoftShadowDistance: 1.5
   sdfSoftShadowNormalBias: 0.005
+  sdfSoftShadowMinStepScale: 1
+  sdfSoftShadowMaxStepFraction: 0.2
+  sdfSoftShadowDistanceFadeStart: 0.7
   cutFaceColor: {r: 0.97, g: 0.43, b: 0.31, a: 1}
   cutFaceBlend: 0.85
+  cutFaceDominanceSoftness: 0.01
   cutFaceOcclusionStrength: 0.45
   cutFaceOcclusionDistance: 0.2
   cutFaceBandSoftness: 0.01
   cutFaceEdgeWidth: 0.04
   cutFaceEdgeBoost: 0.35
+  cutFaceFreshnessBoost: 0.3
+  volumeLightEnabled: 1
+  volumeLightIntensity: 3
+  volumeLightDensity: 1.4
+  volumeLightAnisotropy: 0.15
+  volumeLightSamples: 20
+  volumeLightMaxDistance: 1.2
+  volumeLightShadowStrength: 0.75
+  volumeLightShadowBias: 0.01
+  volumeLightSurfaceFadeDistance: 0.16
+  volumeLightPlaneBand: 0.16
+  volumeLightRemovedDepth: 0.28
+  volumeLightShapeDepth: 0.24
+  volumeLightNoiseScale: 4
+  volumeLightNoiseStrength: 0.18
+  volumeLightNoiseDrift: 0.2
+  debugView: 0
   syncEveryFrame: 1
 --- !u!114 &1680505284
 MonoBehaviour:
@@ -810,8 +1082,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1b7cc630c868f344dbdb89e44153fd3f, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   debugPlanes: []
   uploadDebugPlanesOnEnable: 1
   drawPlaneGizmos: 1
@@ -831,8 +1103,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 1d0faecc9ac8ea943bbe77deb0756a70, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   remainingSplits: 2
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
