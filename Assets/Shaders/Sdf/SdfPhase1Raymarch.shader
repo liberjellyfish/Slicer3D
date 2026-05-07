@@ -62,6 +62,14 @@ Shader "Custom/Sdf/Phase1Raymarch"
         _VolumeAbsorptionDensity ("Volume Absorption Density", Range(0.0, 8.0)) = 0.18
         _VolumeEmissionIntensity ("Volume Emission Intensity", Range(0.0, 4.0)) = 0.0
         _VolumeEmissionColor ("Volume Emission Color", Color) = (0.0, 0.0, 0.0, 1.0)
+        _VolumeFogShapeMode ("Volume Fog Shape Mode (0 Box / 1 Ellipsoid / 2 CapsuleY / 3 Cloud)", Range(0, 3)) = 3
+        _VolumeFogShapeCenter ("Volume Fog Shape Center", Vector) = (0.0, 0.0, 0.0, 0.0)
+        _VolumeFogShapeExtents ("Volume Fog Shape Extents", Vector) = (0.48, 0.42, 0.48, 0.0)
+        _VolumeFogShapeRadius ("Volume Fog Shape Radius", Float) = 0.46
+        _VolumeFogShapeHeight ("Volume Fog Shape Height", Float) = 0.92
+        _VolumeFogShapeEdgeSoftness ("Volume Fog Shape Edge Softness", Float) = 0.12
+        _VolumeFogShapeNoiseErosion ("Volume Fog Shape Noise Erosion", Range(0.0, 1.0)) = 0.22
+        _VolumeFogShapeNoiseScale ("Volume Fog Shape Noise Scale", Float) = 2.2
         _VolumeShadowSamples ("Volume Shadow Samples", Range(4, 64)) = 16
         _VolumeShadowMaxDistance ("Volume Shadow Max Distance", Float) = 2.0
         _VolumePointLightEnabled ("Volume Point Light Enabled", Range(0.0, 1.0)) = 0.0
@@ -91,7 +99,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
         [HideInInspector] _ProxyBoundsMax ("Proxy Bounds Max", Vector) = (0.5, 0.5, 0.5, 0.0)
 
         [Header(Debug)]
-        _DebugView ("Debug View", Range(0, 16)) = 0
+        _DebugView ("Debug View", Range(0, 17)) = 0
     }
 
     SubShader
@@ -174,6 +182,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float sigmaADebug;
                 float sigmaSDebug;
                 float sigmaTDebug;
+                float shapeMaskDebug;
             };
 
             struct SdfVolumeShadowSample
@@ -252,6 +261,14 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float _VolumeAbsorptionDensity;
                 float _VolumeEmissionIntensity;
                 float4 _VolumeEmissionColor;
+                float _VolumeFogShapeMode;
+                float4 _VolumeFogShapeCenter;
+                float4 _VolumeFogShapeExtents;
+                float _VolumeFogShapeRadius;
+                float _VolumeFogShapeHeight;
+                float _VolumeFogShapeEdgeSoftness;
+                float _VolumeFogShapeNoiseErosion;
+                float _VolumeFogShapeNoiseScale;
                 float _VolumeShadowSamples;
                 float _VolumeShadowMaxDistance;
                 float _VolumePointLightEnabled;
@@ -816,6 +833,49 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return smoothstep(0.0, max(_VolumeLightSurfaceFadeDistance, _HitEpsilon), boundaryDistance);
             }
 
+            float SdVolumeEllipsoid(float3 p, float3 extents)
+            {
+                float3 safeExtents = max(extents, float3(1e-4, 1e-4, 1e-4));
+                float3 q = p / safeExtents;
+                float minExtent = min(safeExtents.x, min(safeExtents.y, safeExtents.z));
+                return (length(q) - 1.0) * minExtent;
+            }
+
+            float SdVolumeCapsuleY(float3 p, float radius, float height)
+            {
+                float safeRadius = max(radius, 1e-4);
+                float halfSegment = max(height * 0.5 - safeRadius, 0.0);
+                float3 q = p;
+                q.y -= clamp(q.y, -halfSegment, halfSegment);
+                return length(q) - safeRadius;
+            }
+
+            float EvaluateVolumeFogShapeMask(float3 p)
+            {
+                int mode = (int)round(_VolumeFogShapeMode);
+                if (mode <= 0)
+                {
+                    return 1.0;
+                }
+
+                float3 localP = p - _VolumeFogShapeCenter.xyz;
+                float3 extents = max(_VolumeFogShapeExtents.xyz, float3(0.01, 0.01, 0.01));
+                float signedDistance = mode == 2
+                    ? SdVolumeCapsuleY(localP, _VolumeFogShapeRadius, _VolumeFogShapeHeight)
+                    : SdVolumeEllipsoid(localP, extents);
+
+                float erosion = saturate(_VolumeFogShapeNoiseErosion);
+                if (mode == 3 || erosion > 0.0)
+                {
+                    float3 noiseP = localP * max(_VolumeFogShapeNoiseScale, 0.1);
+                    noiseP += float3(0.29, 0.47, 0.61) * (_Time.y * _VolumeLightNoiseDrift);
+                    float noiseValue = ValueNoise3D(noiseP) * 2.0 - 1.0;
+                    signedDistance += noiseValue * max(_VolumeFogShapeEdgeSoftness, _HitEpsilon) * erosion * 1.75;
+                }
+
+                return 1.0 - smoothstep(0.0, max(_VolumeFogShapeEdgeSoftness, _HitEpsilon), signedDistance);
+            }
+
             SdfVolumeMediumBands EvaluateVolumeMediumBands(float3 samplePositionOS)
             {
                 SdfVolumeMediumBands bands;
@@ -876,11 +936,14 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 out float sigmaS,
                 out float sigmaT,
                 out float3 emissionRadiance,
+                out float shapeMaskDebug,
                 out float densityDebug)
             {
                 SdfVolumeMediumBands mediumBands = EvaluateVolumeMediumBands(samplePositionOS);
                 float finalDistance = mediumBands.finalDistance;
                 float boundaryFade = EvaluateProxyBoundaryFade(samplePositionOS);
+                float volumeShapeMask = EvaluateVolumeFogShapeMask(samplePositionOS);
+                shapeMaskDebug = saturate(volumeShapeMask);
                 float shapeBand = exp(-abs(finalDistance) / max(_VolumeLightShapeDepth, _HitEpsilon));
                 float cutBand = mediumBands.cutBand;
 
@@ -897,7 +960,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float noiseMask = lerp(1.0, 0.45 + contrastNoise * 0.95, saturate(_VolumeLightNoiseStrength));
 
                 float baseFog = _VolumeBaseFogDensity;
-                float density = (baseFog + heightFog * localVolumeMask + shapeBand * 0.2 + cutBand * _VolumeCutFogBoost) * noiseMask * boundaryFade;
+                float density = (baseFog + heightFog * localVolumeMask + shapeBand * 0.2 + cutBand * _VolumeCutFogBoost) * noiseMask * boundaryFade * volumeShapeMask;
                 densityDebug = saturate(density);
 
                 sigmaA = max(0.0, density * _VolumeAbsorptionDensity);
@@ -964,8 +1027,9 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     float sigmaS;
                     float sigmaT;
                     float3 emissionRadiance;
+                    float shapeMaskDebug;
                     float densityDebug;
-                    GetParticipatingMedia(p, sigmaA, sigmaS, sigmaT, emissionRadiance, densityDebug);
+                    GetParticipatingMedia(p, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug);
                     transmittance *= exp(-sigmaT * stepLengthWS);
 
                     if (transmittance < 0.01)
@@ -1102,6 +1166,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 volumeTerms.sigmaADebug = 0.0;
                 volumeTerms.sigmaSDebug = 0.0;
                 volumeTerms.sigmaTDebug = 0.0;
+                volumeTerms.shapeMaskDebug = 0.0;
 
                 if (_VolumeLightEnabled <= 0.0 || _VolumeLightSamples < 1.0)
                 {
@@ -1131,6 +1196,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float sigmaAPeak = 0.0;
                 float sigmaSPeak = 0.0;
                 float sigmaTPeak = 0.0;
+                float shapeMaskPeak = 0.0;
                 float shadowAccumulation = 0.0;
                 float geometryShadowAccumulation = 0.0;
                 float mediaShadowAccumulation = 0.0;
@@ -1147,8 +1213,9 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     float sigmaS;
                     float sigmaT;
                     float3 emissionRadiance;
+                    float shapeMaskDebug;
                     float densityDebug;
-                    GetParticipatingMedia(samplePositionOS, sigmaA, sigmaS, sigmaT, emissionRadiance, densityDebug);
+                    GetParticipatingMedia(samplePositionOS, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug);
 
                     if (sigmaT <= 1e-5 && dot(emissionRadiance, float3(0.2126, 0.7152, 0.0722)) <= 1e-5)
                     {
@@ -1209,6 +1276,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     sigmaAPeak = max(sigmaAPeak, sigmaA);
                     sigmaSPeak = max(sigmaSPeak, sigmaS);
                     sigmaTPeak = max(sigmaTPeak, sigmaT);
+                    shapeMaskPeak = max(shapeMaskPeak, shapeMaskDebug);
                     float inverseSourceWeight = 1.0 / max(sourceWeight, 1e-4);
                     shadowAccumulation += weightedShadow * inverseSourceWeight;
                     geometryShadowAccumulation += weightedGeometryShadow * inverseSourceWeight;
@@ -1227,6 +1295,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 volumeTerms.sigmaADebug = saturate(sigmaAPeak);
                 volumeTerms.sigmaSDebug = saturate(sigmaSPeak);
                 volumeTerms.sigmaTDebug = saturate(sigmaTPeak);
+                volumeTerms.shapeMaskDebug = saturate(shapeMaskPeak);
                 volumeTerms.shadowDebug = contributingSamples > 0.0 ? saturate(shadowAccumulation / contributingSamples) : 1.0;
                 volumeTerms.geometryShadowDebug = contributingSamples > 0.0 ? saturate(geometryShadowAccumulation / contributingSamples) : 1.0;
                 volumeTerms.mediaShadowDebug = contributingSamples > 0.0 ? saturate(mediaShadowAccumulation / contributingSamples) : 1.0;
@@ -1317,6 +1386,11 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 {
                     float readableShadow = pow(saturate(1.0 - shadowTerms.sdfSoftShadow), 0.55) * 2.5;
                     return saturate(readableShadow).xxx;
+                }
+
+                if (debugView == 17)
+                {
+                    return saturate(volumeTerms.shapeMaskDebug).xxx;
                 }
 
                 return 0.0;

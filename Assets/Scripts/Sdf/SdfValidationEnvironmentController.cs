@@ -22,7 +22,8 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         VolumeMediaTransmittance = 11,
         VolumeSigmaA = 12,
         VolumeSigmaS = 13,
-        VolumeSigmaT = 14
+        VolumeSigmaT = 14,
+        VolumeShapeMask = 15
     }
 
     [Header("References")]
@@ -273,7 +274,8 @@ public class SdfValidationEnvironmentController : MonoBehaviour
             || mode == ValidationMode.VolumeMediaTransmittance
             || mode == ValidationMode.VolumeSigmaA
             || mode == ValidationMode.VolumeSigmaS
-            || mode == ValidationMode.VolumeSigmaT;
+            || mode == ValidationMode.VolumeSigmaT
+            || mode == ValidationMode.VolumeShapeMask;
     }
 
     private void CacheCameraDefaults()
@@ -716,6 +718,9 @@ public class SdfValidationEnvironmentController : MonoBehaviour
                 break;
             case ValidationMode.VolumeSigmaT:
                 debugView = SdfPhase1Driver.DebugViewMode.VolumeSigmaT;
+                break;
+            case ValidationMode.VolumeShapeMask:
+                debugView = SdfPhase1Driver.DebugViewMode.VolumeShapeMask;
                 break;
         }
 

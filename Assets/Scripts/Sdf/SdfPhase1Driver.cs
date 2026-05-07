@@ -30,7 +30,8 @@ public class SdfPhase1Driver : MonoBehaviour
         VolumeSigmaA = 13,
         VolumeSigmaS = 14,
         VolumeSigmaT = 15,
-        SdfSoftShadowReadable = 16
+        SdfSoftShadowReadable = 16,
+        VolumeShapeMask = 17
     }
 
     public enum VolumePreset
@@ -47,6 +48,14 @@ public class SdfPhase1Driver : MonoBehaviour
         SurfaceOnly = 1,
         Disabled = 2,
         VolumeOnly = 3
+    }
+
+    public enum VolumeFogShapeMode
+    {
+        ProxyBox = 0,
+        Ellipsoid = 1,
+        CapsuleY = 2,
+        NoiseErodedEllipsoid = 3
     }
 
     [Header("Shape")]
@@ -121,6 +130,16 @@ public class SdfPhase1Driver : MonoBehaviour
     [SerializeField] [Range(0.0f, 4.0f)] private float volumeEmissionIntensity = 0.0f;
     [SerializeField] private Color volumeEmissionColor = Color.black;
 
+    [Header("Volume Shape")]
+    [SerializeField] private VolumeFogShapeMode volumeFogShapeMode = VolumeFogShapeMode.NoiseErodedEllipsoid;
+    [SerializeField] private Vector3 volumeFogShapeCenter = Vector3.zero;
+    [SerializeField] private Vector3 volumeFogShapeExtents = new Vector3(0.48f, 0.42f, 0.48f);
+    [SerializeField] [Min(0.01f)] private float volumeFogShapeRadius = 0.46f;
+    [SerializeField] [Min(0.01f)] private float volumeFogShapeHeight = 0.92f;
+    [SerializeField] [Min(0.001f)] private float volumeFogShapeEdgeSoftness = 0.12f;
+    [SerializeField] [Range(0.0f, 1.0f)] private float volumeFogShapeNoiseErosion = 0.22f;
+    [SerializeField] [Min(0.1f)] private float volumeFogShapeNoiseScale = 2.2f;
+
     [Header("Volume Shadow")]
     [SerializeField] [Range(4, 64)] private int volumeShadowSamples = 16;
     [SerializeField] [Min(0.05f)] private float volumeShadowMaxDistance = 2.0f;
@@ -193,6 +212,14 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int VolumeAbsorptionDensityId = Shader.PropertyToID("_VolumeAbsorptionDensity");
     private static readonly int VolumeEmissionIntensityId = Shader.PropertyToID("_VolumeEmissionIntensity");
     private static readonly int VolumeEmissionColorId = Shader.PropertyToID("_VolumeEmissionColor");
+    private static readonly int VolumeFogShapeModeId = Shader.PropertyToID("_VolumeFogShapeMode");
+    private static readonly int VolumeFogShapeCenterId = Shader.PropertyToID("_VolumeFogShapeCenter");
+    private static readonly int VolumeFogShapeExtentsId = Shader.PropertyToID("_VolumeFogShapeExtents");
+    private static readonly int VolumeFogShapeRadiusId = Shader.PropertyToID("_VolumeFogShapeRadius");
+    private static readonly int VolumeFogShapeHeightId = Shader.PropertyToID("_VolumeFogShapeHeight");
+    private static readonly int VolumeFogShapeEdgeSoftnessId = Shader.PropertyToID("_VolumeFogShapeEdgeSoftness");
+    private static readonly int VolumeFogShapeNoiseErosionId = Shader.PropertyToID("_VolumeFogShapeNoiseErosion");
+    private static readonly int VolumeFogShapeNoiseScaleId = Shader.PropertyToID("_VolumeFogShapeNoiseScale");
     private static readonly int VolumeShadowSamplesId = Shader.PropertyToID("_VolumeShadowSamples");
     private static readonly int VolumeShadowMaxDistanceId = Shader.PropertyToID("_VolumeShadowMaxDistance");
     private static readonly int VolumePointLightEnabledId = Shader.PropertyToID("_VolumePointLightEnabled");
@@ -330,6 +357,10 @@ public class SdfPhase1Driver : MonoBehaviour
                 volumeAbsorptionDensity = 0.08f;
                 volumeEmissionIntensity = 0.0f;
                 volumeEmissionColor = Color.black;
+                volumeFogShapeMode = VolumeFogShapeMode.Ellipsoid;
+                volumeFogShapeExtents = new Vector3(0.5f, 0.38f, 0.5f);
+                volumeFogShapeEdgeSoftness = 0.13f;
+                volumeFogShapeNoiseErosion = 0.1f;
                 volumeShadowSamples = 8;
                 volumeShadowMaxDistance = 1.3f;
                 volumePointLightEnabled = true;
@@ -353,6 +384,10 @@ public class SdfPhase1Driver : MonoBehaviour
                 volumeAbsorptionDensity = 0.28f;
                 volumeEmissionIntensity = 0.0f;
                 volumeEmissionColor = Color.black;
+                volumeFogShapeMode = VolumeFogShapeMode.ProxyBox;
+                volumeFogShapeExtents = new Vector3(0.5f, 0.5f, 0.5f);
+                volumeFogShapeEdgeSoftness = 0.08f;
+                volumeFogShapeNoiseErosion = 0.0f;
                 volumeShadowSamples = 20;
                 volumeShadowMaxDistance = 2.4f;
                 volumePointLightEnabled = true;
@@ -376,6 +411,10 @@ public class SdfPhase1Driver : MonoBehaviour
                 volumeAbsorptionDensity = 0.18f;
                 volumeEmissionIntensity = 0.0f;
                 volumeEmissionColor = Color.black;
+                volumeFogShapeMode = VolumeFogShapeMode.NoiseErodedEllipsoid;
+                volumeFogShapeExtents = new Vector3(0.5f, 0.42f, 0.5f);
+                volumeFogShapeEdgeSoftness = 0.15f;
+                volumeFogShapeNoiseErosion = 0.24f;
                 volumeShadowSamples = 18;
                 volumeShadowMaxDistance = 2.1f;
                 volumePointLightEnabled = true;
@@ -399,6 +438,10 @@ public class SdfPhase1Driver : MonoBehaviour
                 volumeAbsorptionDensity = 0.14f;
                 volumeEmissionIntensity = 0.0f;
                 volumeEmissionColor = Color.black;
+                volumeFogShapeMode = VolumeFogShapeMode.NoiseErodedEllipsoid;
+                volumeFogShapeExtents = new Vector3(0.48f, 0.42f, 0.48f);
+                volumeFogShapeEdgeSoftness = 0.12f;
+                volumeFogShapeNoiseErosion = 0.18f;
                 volumeShadowSamples = 16;
                 volumeShadowMaxDistance = 2.0f;
                 volumePointLightEnabled = true;
@@ -427,6 +470,10 @@ public class SdfPhase1Driver : MonoBehaviour
         }
 
         Bounds meshBounds = sharedMesh.bounds;
+        Vector3 safeVolumeFogShapeExtents = new Vector3(
+            Mathf.Max(volumeFogShapeExtents.x, 0.01f),
+            Mathf.Max(volumeFogShapeExtents.y, 0.01f),
+            Mathf.Max(volumeFogShapeExtents.z, 0.01f));
 
         Vector3 normalizedPlaneNormal = cutPlaneNormal.sqrMagnitude > 1e-6f
             ? cutPlaneNormal.normalized
@@ -488,6 +535,14 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(VolumeAbsorptionDensityId, volumeAbsorptionDensity);
         propertyBlock.SetFloat(VolumeEmissionIntensityId, volumeEmissionIntensity);
         propertyBlock.SetColor(VolumeEmissionColorId, volumeEmissionColor);
+        propertyBlock.SetFloat(VolumeFogShapeModeId, (float)volumeFogShapeMode);
+        propertyBlock.SetVector(VolumeFogShapeCenterId, volumeFogShapeCenter);
+        propertyBlock.SetVector(VolumeFogShapeExtentsId, safeVolumeFogShapeExtents);
+        propertyBlock.SetFloat(VolumeFogShapeRadiusId, volumeFogShapeRadius);
+        propertyBlock.SetFloat(VolumeFogShapeHeightId, volumeFogShapeHeight);
+        propertyBlock.SetFloat(VolumeFogShapeEdgeSoftnessId, volumeFogShapeEdgeSoftness);
+        propertyBlock.SetFloat(VolumeFogShapeNoiseErosionId, volumeFogShapeNoiseErosion);
+        propertyBlock.SetFloat(VolumeFogShapeNoiseScaleId, volumeFogShapeNoiseScale);
         propertyBlock.SetFloat(VolumeShadowSamplesId, volumeShadowSamples);
         propertyBlock.SetFloat(VolumeShadowMaxDistanceId, volumeShadowMaxDistance);
         propertyBlock.SetFloat(VolumePointLightEnabledId, volumePointLightEnabled ? 1.0f : 0.0f);
