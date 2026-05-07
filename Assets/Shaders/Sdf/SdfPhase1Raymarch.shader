@@ -18,6 +18,8 @@ Shader "Custom/Sdf/Phase1Raymarch"
         _SdfSoftShadowMinStepScale ("SDF Soft Shadow Min Step Scale", Range(0.25, 4.0)) = 1.0
         _SdfSoftShadowMaxStepFraction ("SDF Soft Shadow Max Step Fraction", Range(0.02, 0.5)) = 0.2
         _SdfSoftShadowDistanceFadeStart ("SDF Soft Shadow Distance Fade Start", Range(0.0, 1.0)) = 0.7
+        _SdfSoftShadowSceneStrength ("SDF Soft Shadow Scene Strength", Range(0.0, 1.0)) = 0.55
+        _SdfSoftShadowSelfIgnoreDistance ("SDF Soft Shadow Self Ignore Distance", Float) = 0.035
 
         [Header(Cut Surface)]
         _CutFaceColor ("Cut Face Color", Color) = (0.97, 0.43, 0.31, 1.0)
@@ -89,7 +91,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
         [HideInInspector] _ProxyBoundsMax ("Proxy Bounds Max", Vector) = (0.5, 0.5, 0.5, 0.0)
 
         [Header(Debug)]
-        _DebugView ("Debug View", Range(0, 15)) = 0
+        _DebugView ("Debug View", Range(0, 16)) = 0
     }
 
     SubShader
@@ -212,6 +214,8 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float _SdfSoftShadowMinStepScale;
                 float _SdfSoftShadowMaxStepFraction;
                 float _SdfSoftShadowDistanceFadeStart;
+                float _SdfSoftShadowSceneStrength;
+                float _SdfSoftShadowSelfIgnoreDistance;
                 float4 _CutFaceColor;
                 float _CutFaceBlend;
                 float _CutFaceDominanceSoftness;
@@ -277,6 +281,9 @@ Shader "Custom/Sdf/Phase1Raymarch"
             StructuredBuffer<SdfSceneShapeData> _SdfSceneShapes;
             StructuredBuffer<CutPlaneData> _SdfSceneCutPlanes;
             int _SdfSceneShapeCount;
+            StructuredBuffer<SdfSceneShapeData> _SdfShadowSceneShapes;
+            StructuredBuffer<CutPlaneData> _SdfShadowSceneCutPlanes;
+            int _SdfShadowSceneShapeCount;
 
             Varyings vert(Attributes input)
             {
@@ -457,6 +464,59 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return d;
             }
 
+            float ApplyShadowSceneCutPlanes(float3 p, float baseDistance, int cutStart, int cutCount)
+            {
+                float d = baseDistance;
+
+                [loop]
+                for (int i = 0; i < cutCount; i++)
+                {
+                    CutPlaneData cutPlane = _SdfShadowSceneCutPlanes[cutStart + i];
+                    float planeSdf = dot(p, cutPlane.normal) + cutPlane.distance;
+                    float halfSpaceSdf = -(planeSdf * cutPlane.sideSign);
+                    d = max(d, halfSpaceSdf);
+                }
+
+                return d;
+            }
+
+            float ShadowSceneMap(float3 p)
+            {
+                if (_SdfShadowSceneShapeCount <= 0)
+                {
+                    return ApplyCutPlanes(p, BaseShapeMap(p));
+                }
+
+                float3 pWS = TransformObjectToWorld(p);
+                float d = 1e20;
+
+                [loop]
+                for (int i = 0; i < _SdfShadowSceneShapeCount; i++)
+                {
+                    SdfSceneShapeData shape = _SdfShadowSceneShapes[i];
+                    float4 pWS4 = float4(pWS, 1.0);
+                    float3 pShapeOS = float3(
+                        dot(shape.worldToObjectRow0, pWS4),
+                        dot(shape.worldToObjectRow1, pWS4),
+                        dot(shape.worldToObjectRow2, pWS4));
+                    float shapeDistance = BaseShapeMapForData(
+                        pShapeOS,
+                        shape.sphereCenterRadius.xyz,
+                        shape.sphereCenterRadius.w,
+                        shape.boxExtentsShapeMode.xyz,
+                        shape.baseCutPlane,
+                        shape.boxExtentsShapeMode.w);
+
+                    int cutStart = (int)round(shape.cutRangeAndDistanceScale.x);
+                    int cutCount = (int)round(shape.cutRangeAndDistanceScale.y);
+                    float distanceScale = max(shape.cutRangeAndDistanceScale.z, 1e-4);
+                    shapeDistance = ApplyShadowSceneCutPlanes(pShapeOS, shapeDistance, cutStart, cutCount) * distanceScale;
+                    d = min(d, shapeDistance);
+                }
+
+                return d;
+            }
+
             float Map(float3 p)
             {
                 if (_UseSceneSdf > 0.5)
@@ -629,7 +689,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return max(_HitEpsilon * max(_SdfSoftShadowMinStepScale, 0.25), 0.0005);
             }
 
-            float SampleSdfSoftShadow(float3 rayOriginOS, float3 rayDirOS, float maxDistance)
+            float SampleSdfSoftShadowMap(float3 rayOriginOS, float3 rayDirOS, float maxDistance, float useShadowScene, float selfIgnoreDistance)
             {
                 if (_SdfSoftShadowStrength <= 0.0 || _SdfSoftShadowSteps < 1.0 || maxDistance <= 0.0)
                 {
@@ -651,8 +711,12 @@ Shader "Custom/Sdf/Phase1Raymarch"
                         break;
                     }
 
-                    float h = Map(rayOriginOS + rayDirOS * t);
-                    if (h < _HitEpsilon)
+                    float h = useShadowScene > 0.5
+                        ? ShadowSceneMap(rayOriginOS + rayDirOS * t)
+                        : Map(rayOriginOS + rayDirOS * t);
+                    bool ignoreSelfContact = t < selfIgnoreDistance;
+                    h = ignoreSelfContact ? max(h, minStep) : h;
+                    if (h < _HitEpsilon && !ignoreSelfContact)
                     {
                         return 0.0;
                     }
@@ -675,6 +739,24 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 }
 
                 return saturate(shadow);
+            }
+
+            float SampleSdfSoftShadow(float3 rayOriginOS, float3 rayDirOS, float maxDistance)
+            {
+                float localShadow = SampleSdfSoftShadowMap(rayOriginOS, rayDirOS, maxDistance, 0.0, 0.0);
+
+                if (_SdfShadowSceneShapeCount <= 0 || _SdfSoftShadowSceneStrength <= 0.0)
+                {
+                    return localShadow;
+                }
+
+                float sceneShadow = SampleSdfSoftShadowMap(
+                    rayOriginOS,
+                    rayDirOS,
+                    maxDistance,
+                    1.0,
+                    max(_SdfSoftShadowSelfIgnoreDistance, _SdfSoftShadowStart));
+                return saturate(localShadow * lerp(1.0, sceneShadow, saturate(_SdfSoftShadowSceneStrength)));
             }
 
             float SampleMainLightShadow(float3 positionWS)
@@ -1229,6 +1311,12 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 if (debugView == 15)
                 {
                     return saturate(volumeTerms.sigmaTDebug).xxx;
+                }
+
+                if (debugView == 16)
+                {
+                    float readableShadow = pow(saturate(1.0 - shadowTerms.sdfSoftShadow), 0.55) * 2.5;
+                    return saturate(readableShadow).xxx;
                 }
 
                 return 0.0;

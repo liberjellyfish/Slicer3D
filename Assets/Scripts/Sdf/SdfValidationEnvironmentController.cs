@@ -682,7 +682,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         switch (mode)
         {
             case ValidationMode.SoftShadow:
-                debugView = SdfPhase1Driver.DebugViewMode.TotalShadow;
+                debugView = SdfPhase1Driver.DebugViewMode.SdfSoftShadowReadable;
                 break;
             case ValidationMode.CutSurface:
                 debugView = SdfPhase1Driver.DebugViewMode.CutDominance;

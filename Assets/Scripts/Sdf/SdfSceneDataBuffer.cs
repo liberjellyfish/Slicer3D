@@ -9,6 +9,9 @@ public sealed class SdfSceneDataBuffer : IDisposable
     private static readonly int SdfSceneShapeCountId = Shader.PropertyToID("_SdfSceneShapeCount");
     private static readonly int SdfSceneShapesId = Shader.PropertyToID("_SdfSceneShapes");
     private static readonly int SdfSceneCutPlanesId = Shader.PropertyToID("_SdfSceneCutPlanes");
+    private static readonly int SdfShadowSceneShapeCountId = Shader.PropertyToID("_SdfShadowSceneShapeCount");
+    private static readonly int SdfShadowSceneShapesId = Shader.PropertyToID("_SdfShadowSceneShapes");
+    private static readonly int SdfShadowSceneCutPlanesId = Shader.PropertyToID("_SdfShadowSceneCutPlanes");
 
     private readonly List<SdfSceneShapeGpu> shapeData = new List<SdfSceneShapeGpu>();
     private readonly List<CutPlaneData> cutPlaneData = new List<CutPlaneData>();
@@ -50,10 +53,12 @@ public sealed class SdfSceneDataBuffer : IDisposable
         }
 
         targetRenderer.SetPropertyBlock(propertyBlock);
+        UploadShadowSceneGlobals();
     }
 
     public void Dispose()
     {
+        Shader.SetGlobalInt(SdfShadowSceneShapeCountId, 0);
         ReleaseBuffer(ref sceneShapeBuffer);
         ReleaseBuffer(ref sceneCutPlaneBuffer);
         ShapeCount = 0;
@@ -111,6 +116,18 @@ public sealed class SdfSceneDataBuffer : IDisposable
 
         ShapeCount = shapeData.Count;
         CutPlaneCount = cutPlaneData.Count;
+    }
+
+    private void UploadShadowSceneGlobals()
+    {
+        Shader.SetGlobalInt(SdfShadowSceneShapeCountId, shapeData.Count);
+        if (shapeData.Count <= 0 || sceneShapeBuffer == null || sceneCutPlaneBuffer == null)
+        {
+            return;
+        }
+
+        Shader.SetGlobalBuffer(SdfShadowSceneShapesId, sceneShapeBuffer);
+        Shader.SetGlobalBuffer(SdfShadowSceneCutPlanesId, sceneCutPlaneBuffer);
     }
 
     private static CutPlaneData[] GetCutPlanes(SdfPhase1Driver driver)

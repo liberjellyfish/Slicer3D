@@ -29,7 +29,8 @@ public class SdfPhase1Driver : MonoBehaviour
         VolumeMediaTransmittance = 12,
         VolumeSigmaA = 13,
         VolumeSigmaS = 14,
-        VolumeSigmaT = 15
+        VolumeSigmaT = 15,
+        SdfSoftShadowReadable = 16
     }
 
     public enum VolumePreset
@@ -78,6 +79,8 @@ public class SdfPhase1Driver : MonoBehaviour
     [SerializeField] [Range(0.25f, 4.0f)] private float sdfSoftShadowMinStepScale = 1.0f;
     [SerializeField] [Range(0.02f, 0.5f)] private float sdfSoftShadowMaxStepFraction = 0.2f;
     [SerializeField] [Range(0.0f, 1.0f)] private float sdfSoftShadowDistanceFadeStart = 0.7f;
+    [SerializeField] [Range(0.0f, 1.0f)] private float sdfSoftShadowSceneStrength = 0.55f;
+    [SerializeField] [Min(0.0f)] private float sdfSoftShadowSelfIgnoreDistance = 0.035f;
 
     [Header("Cut Surface")]
     [SerializeField] private Color cutFaceColor = new Color(0.97f, 0.43f, 0.31f, 1.0f);
@@ -152,6 +155,8 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int SdfSoftShadowMinStepScaleId = Shader.PropertyToID("_SdfSoftShadowMinStepScale");
     private static readonly int SdfSoftShadowMaxStepFractionId = Shader.PropertyToID("_SdfSoftShadowMaxStepFraction");
     private static readonly int SdfSoftShadowDistanceFadeStartId = Shader.PropertyToID("_SdfSoftShadowDistanceFadeStart");
+    private static readonly int SdfSoftShadowSceneStrengthId = Shader.PropertyToID("_SdfSoftShadowSceneStrength");
+    private static readonly int SdfSoftShadowSelfIgnoreDistanceId = Shader.PropertyToID("_SdfSoftShadowSelfIgnoreDistance");
     private static readonly int CutFaceColorId = Shader.PropertyToID("_CutFaceColor");
     private static readonly int CutFaceBlendId = Shader.PropertyToID("_CutFaceBlend");
     private static readonly int CutFaceDominanceSoftnessId = Shader.PropertyToID("_CutFaceDominanceSoftness");
@@ -441,6 +446,8 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(SdfSoftShadowMinStepScaleId, sdfSoftShadowMinStepScale);
         propertyBlock.SetFloat(SdfSoftShadowMaxStepFractionId, sdfSoftShadowMaxStepFraction);
         propertyBlock.SetFloat(SdfSoftShadowDistanceFadeStartId, sdfSoftShadowDistanceFadeStart);
+        propertyBlock.SetFloat(SdfSoftShadowSceneStrengthId, sdfSoftShadowSceneStrength);
+        propertyBlock.SetFloat(SdfSoftShadowSelfIgnoreDistanceId, sdfSoftShadowSelfIgnoreDistance);
         propertyBlock.SetColor(CutFaceColorId, cutFaceColor);
         propertyBlock.SetFloat(CutFaceBlendId, cutFaceBlend);
         propertyBlock.SetFloat(CutFaceDominanceSoftnessId, cutFaceDominanceSoftness);
