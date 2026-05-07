@@ -181,6 +181,12 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float combinedVisibility;
             };
 
+            struct SdfVolumeMediumBands
+            {
+                float finalDistance;
+                float cutBand;
+            };
+
             struct SdfSceneShapeData
             {
                 float4 worldToObjectRow0;
@@ -379,6 +385,39 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 }
 
                 return d;
+            }
+
+            float EvaluateSceneCutBandForShape(float3 p, float baseDistance, int cutStart, int cutCount, float distanceScale)
+            {
+                if (cutCount <= 0)
+                {
+                    return 0.0;
+                }
+
+                float dominantHalfSpace = -1e20;
+                float dominantPlaneDistance = 1e20;
+
+                [loop]
+                for (int i = 0; i < cutCount; i++)
+                {
+                    CutPlaneData cutPlane = _SdfSceneCutPlanes[cutStart + i];
+                    float planeSdf = dot(p, cutPlane.normal) + cutPlane.distance;
+                    float halfSpaceSdf = -(planeSdf * cutPlane.sideSign);
+
+                    if (halfSpaceSdf > dominantHalfSpace)
+                    {
+                        dominantHalfSpace = halfSpaceSdf;
+                        dominantPlaneDistance = planeSdf;
+                    }
+                }
+
+                float scaledBaseDistance = baseDistance * distanceScale;
+                float scaledPlaneDistance = dominantPlaneDistance * distanceScale;
+                float scaledHalfSpace = dominantHalfSpace * distanceScale;
+                float planeBand = 1.0 - smoothstep(0.0, max(_VolumeLightPlaneBand, _HitEpsilon), abs(scaledPlaneDistance));
+                float originalInterior = saturate((-scaledBaseDistance) / max(_VolumeLightRemovedDepth, _HitEpsilon));
+                float removedSide = smoothstep(0.0, max(_VolumeLightRemovedDepth, _HitEpsilon), scaledHalfSpace);
+                return planeBand * originalInterior * lerp(0.65, 1.0, removedSide);
             }
 
             float SceneMap(float3 p)
@@ -695,19 +734,45 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return smoothstep(0.0, max(_VolumeLightSurfaceFadeDistance, _HitEpsilon), boundaryDistance);
             }
 
-            void GetParticipatingMedia(
-                float3 samplePositionOS,
-                out float sigmaA,
-                out float sigmaS,
-                out float sigmaT,
-                out float3 emissionRadiance,
-                out float densityDebug)
+            SdfVolumeMediumBands EvaluateVolumeMediumBands(float3 samplePositionOS)
             {
-                float finalDistance = Map(samplePositionOS);
-                float boundaryFade = EvaluateProxyBoundaryFade(samplePositionOS);
-                float shapeBand = exp(-abs(finalDistance) / max(_VolumeLightShapeDepth, _HitEpsilon));
-                float cutBand = 0.0;
+                SdfVolumeMediumBands bands;
+                bands.finalDistance = 1e20;
+                bands.cutBand = 0.0;
 
+                if (_UseSceneSdf > 0.5 && _SdfSceneShapeCount > 0)
+                {
+                    float3 samplePositionWS = TransformObjectToWorld(samplePositionOS);
+
+                    [loop]
+                    for (int i = 0; i < _SdfSceneShapeCount; i++)
+                    {
+                        SdfSceneShapeData shape = _SdfSceneShapes[i];
+                        float4 pWS4 = float4(samplePositionWS, 1.0);
+                        float3 pShapeOS = float3(
+                            dot(shape.worldToObjectRow0, pWS4),
+                            dot(shape.worldToObjectRow1, pWS4),
+                            dot(shape.worldToObjectRow2, pWS4));
+                        float baseDistance = BaseShapeMapForData(
+                            pShapeOS,
+                            shape.sphereCenterRadius.xyz,
+                            shape.sphereCenterRadius.w,
+                            shape.boxExtentsShapeMode.xyz,
+                            shape.baseCutPlane,
+                            shape.boxExtentsShapeMode.w);
+
+                        int cutStart = (int)round(shape.cutRangeAndDistanceScale.x);
+                        int cutCount = (int)round(shape.cutRangeAndDistanceScale.y);
+                        float distanceScale = max(shape.cutRangeAndDistanceScale.z, 1e-4);
+                        float finalDistance = ApplySceneCutPlanes(pShapeOS, baseDistance, cutStart, cutCount) * distanceScale;
+                        bands.finalDistance = min(bands.finalDistance, finalDistance);
+                        bands.cutBand = max(bands.cutBand, EvaluateSceneCutBandForShape(pShapeOS, baseDistance, cutStart, cutCount, distanceScale));
+                    }
+
+                    return bands;
+                }
+
+                bands.finalDistance = ApplyCutPlanes(samplePositionOS, BaseShapeMap(samplePositionOS));
                 float dominantHalfSpace;
                 float dominantPlaneDistance;
                 float3 dominantNormalOS;
@@ -717,8 +782,25 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     float planeBand = 1.0 - smoothstep(0.0, max(_VolumeLightPlaneBand, _HitEpsilon), abs(dominantPlaneDistance));
                     float originalInterior = saturate((-baseDistance) / max(_VolumeLightRemovedDepth, _HitEpsilon));
                     float removedSide = smoothstep(0.0, max(_VolumeLightRemovedDepth, _HitEpsilon), dominantHalfSpace);
-                    cutBand = planeBand * originalInterior * lerp(0.65, 1.0, removedSide);
+                    bands.cutBand = planeBand * originalInterior * lerp(0.65, 1.0, removedSide);
                 }
+
+                return bands;
+            }
+
+            void GetParticipatingMedia(
+                float3 samplePositionOS,
+                out float sigmaA,
+                out float sigmaS,
+                out float sigmaT,
+                out float3 emissionRadiance,
+                out float densityDebug)
+            {
+                SdfVolumeMediumBands mediumBands = EvaluateVolumeMediumBands(samplePositionOS);
+                float finalDistance = mediumBands.finalDistance;
+                float boundaryFade = EvaluateProxyBoundaryFade(samplePositionOS);
+                float shapeBand = exp(-abs(finalDistance) / max(_VolumeLightShapeDepth, _HitEpsilon));
+                float cutBand = mediumBands.cutBand;
 
                 float heightSpan = max(_ProxyBoundsMax.y - _ProxyBoundsMin.y, _HitEpsilon);
                 float height01 = saturate((samplePositionOS.y - _ProxyBoundsMin.y) / heightSpan);
