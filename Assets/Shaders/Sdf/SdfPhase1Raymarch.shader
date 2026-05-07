@@ -500,9 +500,19 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return surfaceData;
             }
 
+            float GetNormalSampleEpsilon()
+            {
+                float3 proxySize = max(_ProxyBoundsMax.xyz - _ProxyBoundsMin.xyz, float3(1e-4, 1e-4, 1e-4));
+                float minProxyExtent = max(min(proxySize.x, min(proxySize.y, proxySize.z)) * 0.5, 1e-4);
+                float lowerBound = max(_HitEpsilon * 0.5, minProxyExtent * 1e-4);
+                float upperBound = max(lowerBound, minProxyExtent * 0.01);
+                float requested = max(_NormalEpsilon * 0.25, 1e-5);
+                return clamp(requested, lowerBound, upperBound);
+            }
+
             float3 EstimateNormalOS(float3 p)
             {
-                float e = max(_NormalEpsilon, 1e-4);
+                float e = GetNormalSampleEpsilon();
                 float3 x = float3(e, 0.0, 0.0);
                 float3 y = float3(0.0, e, 0.0);
                 float3 z = float3(0.0, 0.0, e);
