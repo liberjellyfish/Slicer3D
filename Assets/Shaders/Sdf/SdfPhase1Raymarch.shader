@@ -532,6 +532,33 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return tExit >= max(tEnter, 0.0);
             }
 
+            float RefineSurfaceHitT(float3 rayOriginOS, float3 rayDirOS, float coarseT, float maxDistance)
+            {
+                float refinedT = coarseT;
+                float refineEpsilon = max(_HitEpsilon * 0.125, 1e-5);
+
+                // Continue from the coarse sphere-trace hit with a tighter epsilon
+                // so lighting does not quantize into visible contour bands.
+                [unroll]
+                for (int refineStep = 0; refineStep < 6; refineStep++)
+                {
+                    float3 p = rayOriginOS + rayDirOS * refinedT;
+                    float h = Map(p);
+                    if (h <= refineEpsilon)
+                    {
+                        break;
+                    }
+
+                    refinedT += min(h, _HitEpsilon);
+                    if (refinedT >= maxDistance)
+                    {
+                        return maxDistance;
+                    }
+                }
+
+                return refinedT;
+            }
+
             float GetSoftShadowMinStep()
             {
                 return max(_HitEpsilon * max(_SdfSoftShadowMinStepScale, 0.25), 0.0005);
@@ -1152,6 +1179,12 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float3 normalWS = float3(0.0, 1.0, 0.0);
                 float3 finalColor = float3(0.0, 0.0, 0.0);
                 float outputAlpha = 1.0;
+
+                if (hit)
+                {
+                    t = RefineSurfaceHitT(rayOriginOS, rayDirOS, t, maxDistance);
+                    hitPositionOS = rayOriginOS + rayDirOS * t;
+                }
 
                 if (hit)
                 {
