@@ -38,6 +38,7 @@ public class SdfCutPlaneBufferController : MonoBehaviour
     private ComputeBuffer cutPlaneBuffer;
     private NativeArray<CutPlaneData> uploadCache;
     private MaterialPropertyBlock propertyBlock;
+    private CutPlaneData[] runtimePlanes = Array.Empty<CutPlaneData>();
 
     public int UploadedPlaneCount => uploadedPlaneCount;
     public bool HasUploadedPlanes => hasUploadedPlanes;
@@ -49,6 +50,10 @@ public class SdfCutPlaneBufferController : MonoBehaviour
         if (uploadDebugPlanesOnEnable)
         {
             SetPlanes(debugPlanes);
+        }
+        else if (runtimePlanes.Length > 0)
+        {
+            SetPlanes(runtimePlanes);
         }
         else
         {
@@ -97,6 +102,7 @@ public class SdfCutPlaneBufferController : MonoBehaviour
     {
         uploadedPlaneCount = 0;
         hasUploadedPlanes = false;
+        runtimePlanes = Array.Empty<CutPlaneData>();
         BindPlaneCountOnly(0);
     }
 
@@ -111,6 +117,11 @@ public class SdfCutPlaneBufferController : MonoBehaviour
 
         uploadedPlaneCount = count;
         hasUploadedPlanes = count > 0;
+        if (!uploadDebugPlanesOnEnable)
+        {
+            runtimePlanes = CopyPlanes(planes, count);
+        }
+
         if (count > 0)
         {
             for (int i = 0; i < count; i++)
@@ -161,7 +172,20 @@ public class SdfCutPlaneBufferController : MonoBehaviour
     {
         uploadDebugPlanesOnEnable = false;
         debugPlanes = Array.Empty<CutPlaneData>();
+        runtimePlanes = CopyPlanes(planes, planes != null ? planes.Length : 0);
         SetPlanes(planes);
+    }
+
+    private static CutPlaneData[] CopyPlanes(CutPlaneData[] source, int count)
+    {
+        if (source == null || count <= 0)
+        {
+            return Array.Empty<CutPlaneData>();
+        }
+
+        CutPlaneData[] copy = new CutPlaneData[count];
+        Array.Copy(source, copy, count);
+        return copy;
     }
 
     private void CacheComponents()

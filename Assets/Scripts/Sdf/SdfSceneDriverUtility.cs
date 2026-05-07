@@ -4,6 +4,28 @@ using UnityEngine;
 
 public static class SdfSceneDriverUtility
 {
+    public static bool IsRenderableSurfaceDriver(SdfPhase1Driver driver, SdfPhase1Driver excludedDriver = null)
+    {
+        if (driver == null || driver == excludedDriver)
+        {
+            return false;
+        }
+
+        GameObject driverObject = driver.gameObject;
+        if (driverObject == null || !driverObject.scene.IsValid() || !driverObject.activeInHierarchy || !driver.isActiveAndEnabled)
+        {
+            return false;
+        }
+
+        if (driver.GetComponent<SdfSharedVolumeProxy>() != null)
+        {
+            return false;
+        }
+
+        Renderer renderer = driver.GetComponent<Renderer>();
+        return renderer != null && renderer.enabled && renderer.gameObject.activeInHierarchy;
+    }
+
     public static SdfPhase1Driver[] FindSurfaceDrivers(SdfPhase1Driver excludedDriver = null)
     {
         SdfPhase1Driver[] foundDrivers = UnityEngine.Object.FindObjectsByType<SdfPhase1Driver>(FindObjectsSortMode.None);
@@ -16,12 +38,7 @@ public static class SdfSceneDriverUtility
         for (int i = 0; i < foundDrivers.Length; i++)
         {
             SdfPhase1Driver driver = foundDrivers[i];
-            if (driver == null || driver == excludedDriver || !driver.gameObject.scene.IsValid())
-            {
-                continue;
-            }
-
-            if (driver.GetComponent<SdfSharedVolumeProxy>() != null)
+            if (!IsRenderableSurfaceDriver(driver, excludedDriver))
             {
                 continue;
             }
@@ -44,7 +61,7 @@ public static class SdfSceneDriverUtility
         for (int i = 0; i < drivers.Count; i++)
         {
             SdfPhase1Driver driver = drivers[i];
-            if (driver == null)
+            if (!IsRenderableSurfaceDriver(driver))
             {
                 continue;
             }

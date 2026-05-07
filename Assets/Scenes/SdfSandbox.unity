@@ -228,8 +228,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   m_Version: 3
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -251,8 +251,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 6788262aca2311647a9379d7ccf42672, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   animateInPlayMode: 1
   rotateYaw: 1
   yawSpeed: 18
@@ -1049,8 +1049,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c52e07e5e65b922418cc371488b160d0, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   shapeMode: 0
   sphereCenter: {x: 0, y: 0, z: 0}
   sphereRadius: 0.33
@@ -1104,6 +1104,9 @@ MonoBehaviour:
   volumeHeightFogStrength: 0.11
   volumeCutFogBoost: 1.55
   volumeNoiseContrast: 1.35
+  volumeAbsorptionDensity: 0.18
+  volumeEmissionIntensity: 0
+  volumeEmissionColor: {r: 0, g: 0, b: 0, a: 1}
   volumeShadowSamples: 18
   volumeShadowMaxDistance: 2.1
   volumePointLightEnabled: 1
@@ -1232,7 +1235,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 4.8, y: 4.8, z: 4.8}
+  m_LocalScale: {x: 4.7, y: 4.7, z: 4.7}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -1247,8 +1250,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c52e07e5e65b922418cc371488b160d0, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   shapeMode: 0
   sphereCenter: {x: 0, y: 0, z: 0}
   sphereRadius: 0.33
@@ -1302,6 +1305,9 @@ MonoBehaviour:
   volumeHeightFogStrength: 0.11
   volumeCutFogBoost: 1.55
   volumeNoiseContrast: 1.35
+  volumeAbsorptionDensity: 0.18
+  volumeEmissionIntensity: 0
+  volumeEmissionColor: {r: 0, g: 0, b: 0, a: 1}
   volumeShadowSamples: 18
   volumeShadowMaxDistance: 2.1
   volumePointLightEnabled: 1
@@ -1323,8 +1329,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a8c9f06d4f2b4c4aa0f927b71d5e9c32, type: 3}
-  m_Name:
-  m_EditorClassIdentifier:
+  m_Name: 
+  m_EditorClassIdentifier: 
   autoFindSurfaceDrivers: 1
   surfaceDrivers:
   - {fileID: 1680505283}

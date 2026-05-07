@@ -26,7 +26,10 @@ public class SdfPhase1Driver : MonoBehaviour
         VolumeShadow = 9,
         VolumeLight = 10,
         VolumeGeometryShadow = 11,
-        VolumeMediaTransmittance = 12
+        VolumeMediaTransmittance = 12,
+        VolumeSigmaA = 13,
+        VolumeSigmaS = 14,
+        VolumeSigmaT = 15
     }
 
     public enum VolumePreset
@@ -111,6 +114,9 @@ public class SdfPhase1Driver : MonoBehaviour
     [SerializeField] [Range(0.0f, 0.5f)] private float volumeHeightFogStrength = 0.08f;
     [SerializeField] [Range(0.0f, 4.0f)] private float volumeCutFogBoost = 1.4f;
     [SerializeField] [Range(0.25f, 4.0f)] private float volumeNoiseContrast = 1.25f;
+    [SerializeField] [Range(0.0f, 8.0f)] private float volumeAbsorptionDensity = 0.18f;
+    [SerializeField] [Range(0.0f, 4.0f)] private float volumeEmissionIntensity = 0.0f;
+    [SerializeField] private Color volumeEmissionColor = Color.black;
 
     [Header("Volume Shadow")]
     [SerializeField] [Range(4, 64)] private int volumeShadowSamples = 16;
@@ -179,6 +185,9 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int VolumeHeightFogStrengthId = Shader.PropertyToID("_VolumeHeightFogStrength");
     private static readonly int VolumeCutFogBoostId = Shader.PropertyToID("_VolumeCutFogBoost");
     private static readonly int VolumeNoiseContrastId = Shader.PropertyToID("_VolumeNoiseContrast");
+    private static readonly int VolumeAbsorptionDensityId = Shader.PropertyToID("_VolumeAbsorptionDensity");
+    private static readonly int VolumeEmissionIntensityId = Shader.PropertyToID("_VolumeEmissionIntensity");
+    private static readonly int VolumeEmissionColorId = Shader.PropertyToID("_VolumeEmissionColor");
     private static readonly int VolumeShadowSamplesId = Shader.PropertyToID("_VolumeShadowSamples");
     private static readonly int VolumeShadowMaxDistanceId = Shader.PropertyToID("_VolumeShadowMaxDistance");
     private static readonly int VolumePointLightEnabledId = Shader.PropertyToID("_VolumePointLightEnabled");
@@ -313,6 +322,9 @@ public class SdfPhase1Driver : MonoBehaviour
                 volumeHeightFogStrength = 0.05f;
                 volumeCutFogBoost = 1.1f;
                 volumeNoiseContrast = 1.0f;
+                volumeAbsorptionDensity = 0.08f;
+                volumeEmissionIntensity = 0.0f;
+                volumeEmissionColor = Color.black;
                 volumeShadowSamples = 8;
                 volumeShadowMaxDistance = 1.3f;
                 volumePointLightEnabled = true;
@@ -333,6 +345,9 @@ public class SdfPhase1Driver : MonoBehaviour
                 volumeHeightFogStrength = 0.16f;
                 volumeCutFogBoost = 1.8f;
                 volumeNoiseContrast = 1.6f;
+                volumeAbsorptionDensity = 0.28f;
+                volumeEmissionIntensity = 0.0f;
+                volumeEmissionColor = Color.black;
                 volumeShadowSamples = 20;
                 volumeShadowMaxDistance = 2.4f;
                 volumePointLightEnabled = true;
@@ -353,6 +368,9 @@ public class SdfPhase1Driver : MonoBehaviour
                 volumeHeightFogStrength = 0.11f;
                 volumeCutFogBoost = 1.55f;
                 volumeNoiseContrast = 1.35f;
+                volumeAbsorptionDensity = 0.18f;
+                volumeEmissionIntensity = 0.0f;
+                volumeEmissionColor = Color.black;
                 volumeShadowSamples = 18;
                 volumeShadowMaxDistance = 2.1f;
                 volumePointLightEnabled = true;
@@ -373,6 +391,9 @@ public class SdfPhase1Driver : MonoBehaviour
                 volumeHeightFogStrength = 0.08f;
                 volumeCutFogBoost = 1.4f;
                 volumeNoiseContrast = 1.25f;
+                volumeAbsorptionDensity = 0.14f;
+                volumeEmissionIntensity = 0.0f;
+                volumeEmissionColor = Color.black;
                 volumeShadowSamples = 16;
                 volumeShadowMaxDistance = 2.0f;
                 volumePointLightEnabled = true;
@@ -431,7 +452,7 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(CutFaceFreshnessBoostId, cutFaceFreshnessBoost);
         bool volumeEnabled = volumeLightEnabled && volumeContributionMode != VolumeContributionMode.Disabled;
         float sdfSurfaceContribution = volumeContributionMode == VolumeContributionMode.VolumeOnly || volumeContributionMode == VolumeContributionMode.Disabled ? 0.0f : 1.0f;
-        float surfaceContribution = volumeEnabled && (volumeContributionMode == VolumeContributionMode.Full || volumeContributionMode == VolumeContributionMode.VolumeOnly) ? 1.0f : 0.0f;
+        float surfaceContribution = volumeEnabled && volumeContributionMode == VolumeContributionMode.Full ? 1.0f : 0.0f;
         float backgroundContribution = volumeEnabled && (volumeContributionMode == VolumeContributionMode.Full || volumeContributionMode == VolumeContributionMode.VolumeOnly) ? 1.0f : 0.0f;
         propertyBlock.SetFloat(SdfSurfaceContributionId, sdfSurfaceContribution);
         propertyBlock.SetFloat(UseSceneSdfId, 0.0f);
@@ -457,6 +478,9 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(VolumeHeightFogStrengthId, volumeHeightFogStrength);
         propertyBlock.SetFloat(VolumeCutFogBoostId, volumeCutFogBoost);
         propertyBlock.SetFloat(VolumeNoiseContrastId, volumeNoiseContrast);
+        propertyBlock.SetFloat(VolumeAbsorptionDensityId, volumeAbsorptionDensity);
+        propertyBlock.SetFloat(VolumeEmissionIntensityId, volumeEmissionIntensity);
+        propertyBlock.SetColor(VolumeEmissionColorId, volumeEmissionColor);
         propertyBlock.SetFloat(VolumeShadowSamplesId, volumeShadowSamples);
         propertyBlock.SetFloat(VolumeShadowMaxDistanceId, volumeShadowMaxDistance);
         propertyBlock.SetFloat(VolumePointLightEnabledId, volumePointLightEnabled ? 1.0f : 0.0f);

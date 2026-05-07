@@ -71,7 +71,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
             for (int i = 0; i < sources.Count; i++)
             {
                 SdfPhase1Driver driver = sources[i];
-                if (driver == null)
+                if (!SdfSceneDriverUtility.IsRenderableSurfaceDriver(driver))
                 {
                     continue;
                 }
