@@ -29,19 +29,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
             return;
         }
 
-        BuildSceneData(sceneTransform, sources);
-        EnsureBuffer(ref sceneShapeBuffer, Mathf.Max(shapeData.Count, 1), SdfSceneShapeGpu.Stride);
-        EnsureBuffer(ref sceneCutPlaneBuffer, Mathf.Max(cutPlaneData.Count, 1), CutPlaneData.Stride);
-
-        if (shapeData.Count > 0)
-        {
-            sceneShapeBuffer.SetData(shapeData.ToArray());
-        }
-
-        if (cutPlaneData.Count > 0)
-        {
-            sceneCutPlaneBuffer.SetData(cutPlaneData.ToArray());
-        }
+        UploadBuffers(sceneTransform, sources);
 
         targetRenderer.GetPropertyBlock(propertyBlock);
         propertyBlock.SetFloat(UseSceneSdfId, shapeData.Count > 0 ? 1.0f : 0.0f);
@@ -53,6 +41,17 @@ public sealed class SdfSceneDataBuffer : IDisposable
         }
 
         targetRenderer.SetPropertyBlock(propertyBlock);
+        UploadShadowSceneGlobals();
+    }
+
+    public void UploadGlobals(Transform sceneTransform, IReadOnlyList<SdfPhase1Driver> sources)
+    {
+        if (sceneTransform == null)
+        {
+            return;
+        }
+
+        UploadBuffers(sceneTransform, sources);
         UploadShadowSceneGlobals();
     }
 
@@ -116,6 +115,23 @@ public sealed class SdfSceneDataBuffer : IDisposable
 
         ShapeCount = shapeData.Count;
         CutPlaneCount = cutPlaneData.Count;
+    }
+
+    private void UploadBuffers(Transform sceneTransform, IReadOnlyList<SdfPhase1Driver> sources)
+    {
+        BuildSceneData(sceneTransform, sources);
+        EnsureBuffer(ref sceneShapeBuffer, Mathf.Max(shapeData.Count, 1), SdfSceneShapeGpu.Stride);
+        EnsureBuffer(ref sceneCutPlaneBuffer, Mathf.Max(cutPlaneData.Count, 1), CutPlaneData.Stride);
+
+        if (shapeData.Count > 0)
+        {
+            sceneShapeBuffer.SetData(shapeData.ToArray());
+        }
+
+        if (cutPlaneData.Count > 0)
+        {
+            sceneCutPlaneBuffer.SetData(cutPlaneData.ToArray());
+        }
     }
 
     private void UploadShadowSceneGlobals()

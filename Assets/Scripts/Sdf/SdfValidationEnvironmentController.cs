@@ -39,6 +39,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     [SerializeField] private ValidationMode validationMode = ValidationMode.Normal;
     [SerializeField] private bool applyOnEnable = true;
     [SerializeField] private bool applyOnValidate = true;
+    [SerializeField] private bool applyInEditMode = true;
 
     [Header("Lighting")]
     [SerializeField] private float normalAmbientIntensity = 1.0f;
@@ -81,8 +82,8 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     [SerializeField] private float virtualPointLightHeight = 1.35f;
     [SerializeField] private float virtualPointLightYawSpeed = 24.0f;
     [SerializeField] private Color virtualPointLightColor = new Color(1.0f, 0.76f, 0.48f, 1.0f);
-    [SerializeField] [Min(0.0f)] private float virtualPointLightIntensity = 18.0f;
-    [SerializeField] [Min(0.05f)] private float virtualPointLightRange = 6.0f;
+    [SerializeField] [Min(0.0f)] private float virtualPointLightIntensity = 16.0f;
+    [SerializeField] [Min(0.05f)] private float virtualPointLightRange = 4.8f;
 
     [Header("Runtime Debug")]
     [SerializeField] private bool enableRuntimeDebugHotkeys = true;
@@ -110,7 +111,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     {
         AutoResolveReferences(false);
         CacheDefaults();
-        if (Application.isPlaying && applyOnEnable)
+        if (applyOnEnable && ShouldApplyOutsideRuntimeGate())
         {
             ApplyCurrentMode();
         }
@@ -122,7 +123,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         virtualPointLightOrbitRadius = Mathf.Max(0.05f, virtualPointLightOrbitRadius);
         virtualPointLightRange = Mathf.Max(0.05f, virtualPointLightRange);
         AutoResolveReferences(false);
-        if (Application.isPlaying && applyOnValidate)
+        if (applyOnValidate && isActiveAndEnabled && ShouldApplyOutsideRuntimeGate())
         {
             ApplyCurrentMode();
         }
@@ -167,6 +168,11 @@ public class SdfValidationEnvironmentController : MonoBehaviour
             UpdateVirtualPointLight();
         }
         ApplyDriverDebug(validationMode);
+    }
+
+    private bool ShouldApplyOutsideRuntimeGate()
+    {
+        return Application.isPlaying || applyInEditMode;
     }
 
     [ContextMenu("Capture Current As Normal Lighting")]

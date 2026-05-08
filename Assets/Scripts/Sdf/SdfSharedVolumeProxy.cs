@@ -10,6 +10,12 @@ using UnityEngine.Rendering;
 [RequireComponent(typeof(MeshFilter))]
 public class SdfSharedVolumeProxy : MonoBehaviour
 {
+    public enum ScreenSpaceVisibilityMode
+    {
+        PhysicalExtinction = 0,
+        ScatteringOnly = 1
+    }
+
     [Header("Scene SDF Source")]
     [SerializeField] private bool autoFindSurfaceDrivers = true;
     [SerializeField] private SdfPhase1Driver[] surfaceDrivers = Array.Empty<SdfPhase1Driver>();
@@ -23,6 +29,9 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     [SerializeField] [Min(0.01f)] private float minBoundsSize = 0.5f;
 
     [Header("Rendering")]
+    [SerializeField] private bool useScreenSpaceVolume = true;
+    [SerializeField] private bool hideProxyRendererInScreenSpace = true;
+    [SerializeField] private ScreenSpaceVisibilityMode screenSpaceVisibilityMode = ScreenSpaceVisibilityMode.ScatteringOnly;
     [SerializeField] private int sortingOrder = 100;
     [SerializeField] private bool drawBoundsGizmo = true;
     [SerializeField] private Color boundsGizmoColor = new Color(1.0f, 0.62f, 0.25f, 0.35f);
@@ -33,6 +42,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     private MaterialPropertyBlock propertyBlock;
 
     public SdfPhase1Driver VolumeDriver => volumeDriver;
+    public bool UseScreenSpaceVolume => useScreenSpaceVolume;
     public bool AutoFitBounds
     {
         get => autoFitBounds;
@@ -83,11 +93,13 @@ public class SdfSharedVolumeProxy : MonoBehaviour
 
     private void OnDisable()
     {
+        SdfPhase1Driver.DisableScreenSpaceVolumeGlobals();
         ReleaseSceneData();
     }
 
     private void OnDestroy()
     {
+        SdfPhase1Driver.DisableScreenSpaceVolumeGlobals();
         ReleaseSceneData();
     }
 
@@ -138,6 +150,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
 
         if (cachedRenderer != null)
         {
+            cachedRenderer.forceRenderingOff = useScreenSpaceVolume && hideProxyRendererInScreenSpace;
             cachedRenderer.sortingOrder = sortingOrder;
             cachedRenderer.shadowCastingMode = ShadowCastingMode.Off;
             cachedRenderer.receiveShadows = false;
@@ -195,7 +208,27 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     private void UploadSceneSdfData()
     {
         CacheComponents();
-        sceneDataBuffer.Upload(cachedRenderer, transform, surfaceDrivers, propertyBlock);
+        if (useScreenSpaceVolume)
+        {
+            // Screen-space volume rendering consumes the scene SDF as globals; the hidden proxy renderer does not own this pass.
+            sceneDataBuffer.UploadGlobals(transform, surfaceDrivers);
+        }
+        else
+        {
+            sceneDataBuffer.Upload(cachedRenderer, transform, surfaceDrivers, propertyBlock);
+        }
+
+        if (useScreenSpaceVolume && volumeDriver != null)
+        {
+            volumeDriver.UploadScreenSpaceVolumeGlobals(
+                transform,
+                sceneDataBuffer.ShapeCount > 0,
+                (int)screenSpaceVisibilityMode);
+        }
+        else
+        {
+            SdfPhase1Driver.DisableScreenSpaceVolumeGlobals();
+        }
     }
 
     private void ReleaseSceneData()

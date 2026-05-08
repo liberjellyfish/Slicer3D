@@ -106,7 +106,7 @@ public class SdfPhase1Driver : MonoBehaviour
     [SerializeField] private bool volumeLightEnabled = false;
     [SerializeField] private VolumeContributionMode volumeContributionMode = VolumeContributionMode.Full;
     [SerializeField] [Range(0.0f, 8.0f)] private float volumeLightIntensity = 3.0f;
-    [SerializeField] [Range(0.0f, 8.0f)] private float volumeLightDensity = 1.4f;
+    [SerializeField] [Range(0.0f, 8.0f)] private float volumeLightDensity = 0.8f;
     [SerializeField] [Range(-0.8f, 0.8f)] private float volumeLightAnisotropy = 0.15f;
     [SerializeField] [Range(4, 32)] private int volumeLightSamples = 20;
     [SerializeField] [Min(0.05f)] private float volumeLightMaxDistance = 1.2f;
@@ -122,13 +122,13 @@ public class SdfPhase1Driver : MonoBehaviour
     [SerializeField] [Min(0.0f)] private float volumeLightNoiseDrift = 0.2f;
 
     [Header("Volume Medium")]
-    [SerializeField] [Range(0.0f, 0.08f)] private float volumeBaseFogDensity = 0.002f;
-    [SerializeField] [Range(0.0f, 0.5f)] private float volumeHeightFogStrength = 0.08f;
-    [SerializeField] [Range(0.0f, 4.0f)] private float volumeCutFogBoost = 1.4f;
+    [SerializeField] [Range(0.0f, 0.08f)] private float volumeBaseFogDensity = 0.0f;
+    [SerializeField] [Range(0.0f, 0.5f)] private float volumeHeightFogStrength = 0.008f;
+    [SerializeField] [Range(0.0f, 4.0f)] private float volumeCutFogBoost = 0.95f;
     [SerializeField] [Range(0.25f, 4.0f)] private float volumeNoiseContrast = 1.25f;
     [SerializeField] [Range(0.0f, 8.0f)] private float volumeAbsorptionDensity = 0.18f;
-    [SerializeField] [Range(0.0f, 0.2f)] private float volumeDensityThreshold = 0.012f;
-    [SerializeField] [Range(0.0f, 0.05f)] private float volumeAlphaClipThreshold = 0.006f;
+    [SerializeField] [Range(0.0f, 0.2f)] private float volumeDensityThreshold = 0.045f;
+    [SerializeField] [Range(0.0f, 0.05f)] private float volumeAlphaClipThreshold = 0.012f;
     [SerializeField] [Range(0.0f, 4.0f)] private float volumeEmissionIntensity = 0.0f;
     [SerializeField] private Color volumeEmissionColor = Color.black;
 
@@ -149,7 +149,7 @@ public class SdfPhase1Driver : MonoBehaviour
     [SerializeField] [Range(1, 24)] private int volumeCloudLobeCount = 12;
     [SerializeField] private Vector3 volumeCloudLobeSpread = new Vector3(0.95f, 0.62f, 0.9f);
     [SerializeField] [Range(0.05f, 1.0f)] private float volumeCloudLobeRadius = 0.34f;
-    [SerializeField] [Range(0.0f, 4.0f)] private float volumeCloudDensityBoost = 1.25f;
+    [SerializeField] [Range(0.0f, 4.0f)] private float volumeCloudDensityBoost = 0.95f;
 
     [Header("Volume Shadow")]
     [SerializeField] [Range(4, 64)] private int volumeShadowSamples = 16;
@@ -159,7 +159,7 @@ public class SdfPhase1Driver : MonoBehaviour
     [SerializeField] private bool volumePointLightEnabled = true;
     [SerializeField] private Vector3 volumePointLightPositionWS = new Vector3(1.4f, 1.6f, -2.2f);
     [SerializeField] private Color volumePointLightColor = new Color(1.0f, 0.76f, 0.48f, 1.0f);
-    [SerializeField] [Range(0.0f, 64.0f)] private float volumePointLightIntensity = 18.0f;
+    [SerializeField] [Range(0.0f, 64.0f)] private float volumePointLightIntensity = 12.0f;
     [SerializeField] [Min(0.05f)] private float volumePointLightRange = 6.0f;
 
     [Header("Volume Display")]
@@ -265,6 +265,10 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int ProxyBoundsMaxId = Shader.PropertyToID("_ProxyBoundsMax");
     private static readonly int DebugViewId = Shader.PropertyToID("_DebugView");
     private static readonly int SdfSceneShapeCountId = Shader.PropertyToID("_SdfSceneShapeCount");
+    private static readonly int SdfScreenSpaceVolumeEnabledId = Shader.PropertyToID("_SdfScreenSpaceVolumeEnabled");
+    private static readonly int SdfVolumeWorldToLocalId = Shader.PropertyToID("_SdfVolumeWorldToLocal");
+    private static readonly int SdfVolumeLocalToWorldId = Shader.PropertyToID("_SdfVolumeLocalToWorld");
+    private static readonly int SdfVolumeVisibilityModeId = Shader.PropertyToID("_SdfVolumeVisibilityMode");
 
     private Renderer cachedRenderer;
     private MeshFilter cachedMeshFilter;
@@ -397,6 +401,92 @@ public class SdfPhase1Driver : MonoBehaviour
         ApplyProperties();
     }
 
+    public void UploadScreenSpaceVolumeGlobals(Transform volumeTransform, bool hasSceneSdf, int visibilityMode)
+    {
+        if (volumeTransform == null)
+        {
+            return;
+        }
+
+        Vector3 safeVolumeFogShapeExtents = new Vector3(
+            Mathf.Max(volumeFogShapeExtents.x, 0.01f),
+            Mathf.Max(volumeFogShapeExtents.y, 0.01f),
+            Mathf.Max(volumeFogShapeExtents.z, 0.01f));
+        bool volumeModeCanRender = volumeContributionMode == VolumeContributionMode.Full
+            || volumeContributionMode == VolumeContributionMode.VolumeOnly;
+        bool volumeEnabled = volumeLightEnabled && volumeModeCanRender;
+
+        Shader.SetGlobalFloat(SdfScreenSpaceVolumeEnabledId, volumeEnabled ? 1.0f : 0.0f);
+        Shader.SetGlobalMatrix(SdfVolumeWorldToLocalId, volumeTransform.worldToLocalMatrix);
+        Shader.SetGlobalMatrix(SdfVolumeLocalToWorldId, volumeTransform.localToWorldMatrix);
+        Shader.SetGlobalFloat(SdfVolumeVisibilityModeId, Mathf.Clamp(visibilityMode, 0, 1));
+        Shader.SetGlobalFloat(UseSceneSdfId, hasSceneSdf ? 1.0f : 0.0f);
+        Shader.SetGlobalFloat(VolumeLightEnabledId, volumeEnabled ? 1.0f : 0.0f);
+        Shader.SetGlobalFloat(VolumeBackgroundContributionId, volumeEnabled ? 1.0f : 0.0f);
+        Shader.SetGlobalFloat(VolumeLightIntensityId, volumeLightIntensity);
+        Shader.SetGlobalFloat(VolumeLightDensityId, volumeLightDensity);
+        Shader.SetGlobalFloat(VolumeLightAnisotropyId, volumeLightAnisotropy);
+        Shader.SetGlobalFloat(VolumeLightSamplesId, volumeLightSamples);
+        Shader.SetGlobalFloat(VolumeLightMaxDistanceId, volumeLightMaxDistance);
+        Shader.SetGlobalFloat(VolumeLightMaxStepLengthId, volumeLightMaxStepLength);
+        Shader.SetGlobalFloat(VolumeLightShadowStrengthId, volumeLightShadowStrength);
+        Shader.SetGlobalFloat(VolumeLightShadowBiasId, volumeLightShadowBias);
+        Shader.SetGlobalFloat(VolumeLightSurfaceFadeDistanceId, volumeLightSurfaceFadeDistance);
+        Shader.SetGlobalFloat(VolumeLightPlaneBandId, volumeLightPlaneBand);
+        Shader.SetGlobalFloat(VolumeLightRemovedDepthId, volumeLightRemovedDepth);
+        Shader.SetGlobalFloat(VolumeLightShapeDepthId, volumeLightShapeDepth);
+        Shader.SetGlobalFloat(VolumeLightNoiseScaleId, volumeLightNoiseScale);
+        Shader.SetGlobalFloat(VolumeLightNoiseStrengthId, volumeLightNoiseStrength);
+        Shader.SetGlobalFloat(VolumeLightNoiseDriftId, volumeLightNoiseDrift);
+        Shader.SetGlobalFloat(VolumeBaseFogDensityId, volumeBaseFogDensity);
+        Shader.SetGlobalFloat(VolumeHeightFogStrengthId, volumeHeightFogStrength);
+        Shader.SetGlobalFloat(VolumeCutFogBoostId, volumeCutFogBoost);
+        Shader.SetGlobalFloat(VolumeNoiseContrastId, volumeNoiseContrast);
+        Shader.SetGlobalFloat(VolumeAbsorptionDensityId, volumeAbsorptionDensity);
+        Shader.SetGlobalFloat(VolumeDensityThresholdId, volumeDensityThreshold);
+        Shader.SetGlobalFloat(VolumeAlphaClipThresholdId, volumeAlphaClipThreshold);
+        Shader.SetGlobalFloat(VolumeEmissionIntensityId, volumeEmissionIntensity);
+        Shader.SetGlobalColor(VolumeEmissionColorId, volumeEmissionColor);
+        Shader.SetGlobalFloat(VolumeFogShapeModeId, (float)volumeFogShapeMode);
+        Shader.SetGlobalVector(VolumeFogShapeCenterId, volumeFogShapeCenter);
+        Shader.SetGlobalVector(VolumeFogShapeExtentsId, safeVolumeFogShapeExtents);
+        Shader.SetGlobalFloat(VolumeFogShapeRadiusId, volumeFogShapeRadius);
+        Shader.SetGlobalFloat(VolumeFogShapeHeightId, volumeFogShapeHeight);
+        Shader.SetGlobalFloat(VolumeFogShapeEdgeSoftnessId, volumeFogShapeEdgeSoftness);
+        Shader.SetGlobalFloat(VolumeFogShapeNoiseErosionId, volumeFogShapeNoiseErosion);
+        Shader.SetGlobalFloat(VolumeFogShapeNoiseScaleId, volumeFogShapeNoiseScale);
+        Shader.SetGlobalFloat(VolumeCloudCoverageId, volumeCloudCoverage);
+        Shader.SetGlobalFloat(VolumeCloudSoftnessId, volumeCloudSoftness);
+        Shader.SetGlobalFloat(VolumeCloudDetailStrengthId, volumeCloudDetailStrength);
+        Shader.SetGlobalFloat(VolumeCloudDetailScaleId, volumeCloudDetailScale);
+        Shader.SetGlobalFloat(VolumeCloudWarpStrengthId, volumeCloudWarpStrength);
+        Shader.SetGlobalFloat(VolumeCloudLobeCountId, volumeCloudLobeCount);
+        Shader.SetGlobalVector(VolumeCloudLobeSpreadId, volumeCloudLobeSpread);
+        Shader.SetGlobalFloat(VolumeCloudLobeRadiusId, volumeCloudLobeRadius);
+        Shader.SetGlobalFloat(VolumeCloudDensityBoostId, volumeCloudDensityBoost);
+        Shader.SetGlobalFloat(VolumeShadowSamplesId, volumeShadowSamples);
+        Shader.SetGlobalFloat(VolumeShadowMaxDistanceId, volumeShadowMaxDistance);
+        Shader.SetGlobalFloat(VolumePointLightEnabledId, volumePointLightEnabled ? 1.0f : 0.0f);
+        Shader.SetGlobalVector(
+            VolumePointLightPositionWSId,
+            new Vector4(volumePointLightPositionWS.x, volumePointLightPositionWS.y, volumePointLightPositionWS.z, 1.0f));
+        Shader.SetGlobalColor(VolumePointLightColorId, volumePointLightColor);
+        Shader.SetGlobalFloat(VolumePointLightIntensityId, volumePointLightIntensity);
+        Shader.SetGlobalFloat(VolumePointLightRangeId, volumePointLightRange);
+        Shader.SetGlobalFloat(VolumeExposureId, volumeExposure);
+        Shader.SetGlobalColor(VolumeColorTintId, volumeColorTint);
+        Shader.SetGlobalFloat(DebugViewId, (float)debugView);
+        Shader.SetGlobalFloat(MaxDistanceId, maxDistance);
+        Shader.SetGlobalFloat(HitEpsilonId, hitEpsilon);
+        Shader.SetGlobalVector(ProxyBoundsMinId, new Vector4(-0.5f, -0.5f, -0.5f, 0.0f));
+        Shader.SetGlobalVector(ProxyBoundsMaxId, new Vector4(0.5f, 0.5f, 0.5f, 0.0f));
+    }
+
+    public static void DisableScreenSpaceVolumeGlobals()
+    {
+        Shader.SetGlobalFloat(SdfScreenSpaceVolumeEnabledId, 0.0f);
+    }
+
     public void SetCloudShapeSettings(
         VolumeFogShapeMode shapeMode,
         Vector3 shapeExtents,
@@ -445,25 +535,25 @@ public class SdfPhase1Driver : MonoBehaviour
         {
             case VolumePreset.Performance:
                 volumeLightIntensity = 2.6f;
-                volumeLightDensity = 0.65f;
+                volumeLightDensity = 0.48f;
                 volumeLightSamples = 8;
                 volumeLightMaxDistance = 0.65f;
                 volumeLightMaxStepLength = 0.12f;
                 volumeLightShadowStrength = 0.45f;
-                volumeBaseFogDensity = 0.0015f;
-                volumeHeightFogStrength = 0.05f;
-                volumeCutFogBoost = 1.1f;
+                volumeBaseFogDensity = 0.0f;
+                volumeHeightFogStrength = 0.004f;
+                volumeCutFogBoost = 0.65f;
                 volumeNoiseContrast = 1.0f;
                 volumeAbsorptionDensity = 0.08f;
-                volumeDensityThreshold = 0.01f;
-                volumeAlphaClipThreshold = 0.005f;
+                volumeDensityThreshold = 0.05f;
+                volumeAlphaClipThreshold = 0.014f;
                 volumeEmissionIntensity = 0.0f;
                 volumeEmissionColor = Color.black;
                 volumeFogShapeMode = VolumeFogShapeMode.Ellipsoid;
                 volumeFogShapeExtents = new Vector3(0.5f, 0.38f, 0.5f);
                 volumeFogShapeEdgeSoftness = 0.13f;
                 volumeFogShapeNoiseErosion = 0.1f;
-                volumeCloudCoverage = 0.55f;
+                volumeCloudCoverage = 0.46f;
                 volumeCloudSoftness = 0.38f;
                 volumeCloudDetailStrength = 0.18f;
                 volumeCloudDetailScale = 5.0f;
@@ -471,11 +561,11 @@ public class SdfPhase1Driver : MonoBehaviour
                 volumeCloudLobeCount = 8;
                 volumeCloudLobeSpread = new Vector3(0.9f, 0.5f, 0.85f);
                 volumeCloudLobeRadius = 0.38f;
-                volumeCloudDensityBoost = 0.85f;
+                volumeCloudDensityBoost = 0.55f;
                 volumeShadowSamples = 8;
                 volumeShadowMaxDistance = 1.3f;
                 volumePointLightEnabled = true;
-                volumePointLightIntensity = 12.0f;
+                volumePointLightIntensity = 8.0f;
                 volumePointLightRange = 5.0f;
                 volumeExposure = 1.05f;
                 volumeColorTint = new Color(1.0f, 0.82f, 0.66f, 1.0f);
@@ -520,57 +610,57 @@ public class SdfPhase1Driver : MonoBehaviour
                 break;
 
             case VolumePreset.CinematicWarm:
-                volumeLightIntensity = 4.0f;
-                volumeLightDensity = 0.85f;
+                volumeLightIntensity = 2.8f;
+                volumeLightDensity = 0.82f;
                 volumeLightSamples = 14;
                 volumeLightMaxDistance = 0.9f;
                 volumeLightMaxStepLength = 0.09f;
                 volumeLightShadowStrength = 0.78f;
-                volumeBaseFogDensity = 0.003f;
-                volumeHeightFogStrength = 0.11f;
-                volumeCutFogBoost = 1.55f;
+                volumeBaseFogDensity = 0.0f;
+                volumeHeightFogStrength = 0.008f;
+                volumeCutFogBoost = 0.95f;
                 volumeNoiseContrast = 1.35f;
                 volumeAbsorptionDensity = 0.18f;
-                volumeDensityThreshold = 0.012f;
-                volumeAlphaClipThreshold = 0.006f;
+                volumeDensityThreshold = 0.045f;
+                volumeAlphaClipThreshold = 0.012f;
                 volumeEmissionIntensity = 0.0f;
                 volumeEmissionColor = Color.black;
                 volumeFogShapeMode = VolumeFogShapeMode.NoiseErodedEllipsoid;
                 volumeFogShapeExtents = new Vector3(0.5f, 0.42f, 0.5f);
                 volumeFogShapeEdgeSoftness = 0.15f;
                 volumeFogShapeNoiseErosion = 0.24f;
-                volumeCloudCoverage = 0.38f;
+                volumeCloudCoverage = 0.48f;
                 volumeCloudSoftness = 0.26f;
-                volumeCloudDetailStrength = 0.38f;
+                volumeCloudDetailStrength = 0.64f;
                 volumeCloudDetailScale = 8.0f;
                 volumeCloudWarpStrength = 0.42f;
                 volumeCloudLobeCount = 14;
                 volumeCloudLobeSpread = new Vector3(1.0f, 0.64f, 0.92f);
                 volumeCloudLobeRadius = 0.36f;
-                volumeCloudDensityBoost = 1.45f;
+                volumeCloudDensityBoost = 0.95f;
                 volumeShadowSamples = 18;
                 volumeShadowMaxDistance = 2.1f;
                 volumePointLightEnabled = true;
                 volumePointLightIntensity = 18.0f;
                 volumePointLightRange = 6.0f;
-                volumeExposure = 1.25f;
+                volumeExposure = 1.2f;
                 volumeColorTint = new Color(1.0f, 0.78f, 0.54f, 1.0f);
                 break;
 
             default:
                 volumeLightIntensity = 3.0f;
-                volumeLightDensity = 0.8f;
+                volumeLightDensity = 0.72f;
                 volumeLightSamples = 12;
                 volumeLightMaxDistance = 0.8f;
                 volumeLightMaxStepLength = 0.1f;
                 volumeLightShadowStrength = 0.7f;
-                volumeBaseFogDensity = 0.002f;
-                volumeHeightFogStrength = 0.08f;
-                volumeCutFogBoost = 1.4f;
+                volumeBaseFogDensity = 0.0f;
+                volumeHeightFogStrength = 0.006f;
+                volumeCutFogBoost = 0.85f;
                 volumeNoiseContrast = 1.25f;
                 volumeAbsorptionDensity = 0.14f;
-                volumeDensityThreshold = 0.012f;
-                volumeAlphaClipThreshold = 0.006f;
+                volumeDensityThreshold = 0.045f;
+                volumeAlphaClipThreshold = 0.012f;
                 volumeEmissionIntensity = 0.0f;
                 volumeEmissionColor = Color.black;
                 volumeFogShapeMode = VolumeFogShapeMode.NoiseErodedEllipsoid;
@@ -585,11 +675,11 @@ public class SdfPhase1Driver : MonoBehaviour
                 volumeCloudLobeCount = 12;
                 volumeCloudLobeSpread = new Vector3(0.95f, 0.62f, 0.9f);
                 volumeCloudLobeRadius = 0.34f;
-                volumeCloudDensityBoost = 1.25f;
+                volumeCloudDensityBoost = 0.85f;
                 volumeShadowSamples = 16;
                 volumeShadowMaxDistance = 2.0f;
                 volumePointLightEnabled = true;
-                volumePointLightIntensity = 16.0f;
+                volumePointLightIntensity = 12.0f;
                 volumePointLightRange = 5.8f;
                 volumeExposure = 1.15f;
                 volumeColorTint = new Color(1.0f, 0.82f, 0.62f, 1.0f);

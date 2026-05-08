@@ -888,6 +888,7 @@ MonoBehaviour:
   validationMode: 9
   applyOnEnable: 1
   applyOnValidate: 1
+  applyInEditMode: 1
   normalAmbientIntensity: 1
   validationAmbientIntensity: 0.35
   useDarkValidationSky: 1
@@ -918,8 +919,8 @@ MonoBehaviour:
   virtualPointLightHeight: 1.35
   virtualPointLightYawSpeed: 24
   virtualPointLightColor: {r: 1, g: 0.76, b: 0.48, a: 1}
-  virtualPointLightIntensity: 18
-  virtualPointLightRange: 6
+  virtualPointLightIntensity: 16
+  virtualPointLightRange: 4.8
   enableRuntimeDebugHotkeys: 1
   lightingDebugKey: 282
   volumeDensityDebugKey: 283
@@ -1085,8 +1086,8 @@ MonoBehaviour:
   cutFaceFreshnessBoost: 0.3
   volumeLightEnabled: 1
   volumeContributionMode: 0
-  volumeLightIntensity: 3
-  volumeLightDensity: 0.8
+  volumeLightIntensity: 2.8
+  volumeLightDensity: 0.82
   volumeLightAnisotropy: 0.15
   volumeLightSamples: 12
   volumeLightMaxDistance: 0.8
@@ -1100,9 +1101,9 @@ MonoBehaviour:
   volumeLightNoiseScale: 4
   volumeLightNoiseStrength: 0.18
   volumeLightNoiseDrift: 0.2
-  volumeBaseFogDensity: 0.003
-  volumeHeightFogStrength: 0.11
-  volumeCutFogBoost: 1.55
+  volumeBaseFogDensity: 0
+  volumeHeightFogStrength: 0.008
+  volumeCutFogBoost: 0.95
   volumeNoiseContrast: 1.35
   volumeAbsorptionDensity: 0.18
   volumeEmissionIntensity: 0
@@ -1112,9 +1113,9 @@ MonoBehaviour:
   volumePointLightEnabled: 1
   volumePointLightPositionWS: {x: 1.4, y: 1.6, z: -2.2}
   volumePointLightColor: {r: 1, g: 0.76, b: 0.48, a: 1}
-  volumePointLightIntensity: 18
+  volumePointLightIntensity: 12
   volumePointLightRange: 6
-  volumeExposure: 1.25
+  volumeExposure: 1.2
   volumeColorTint: {r: 1, g: 0.78, b: 0.54, a: 1}
   debugView: 0
   syncEveryFrame: 1
@@ -1287,8 +1288,8 @@ MonoBehaviour:
   cutFaceFreshnessBoost: 0.3
   volumeLightEnabled: 1
   volumeContributionMode: 3
-  volumeLightIntensity: 3
-  volumeLightDensity: 0.8
+  volumeLightIntensity: 2.8
+  volumeLightDensity: 0.82
   volumeLightAnisotropy: 0.15
   volumeLightSamples: 12
   volumeLightMaxDistance: 0.8
@@ -1302,9 +1303,9 @@ MonoBehaviour:
   volumeLightNoiseScale: 4
   volumeLightNoiseStrength: 0.18
   volumeLightNoiseDrift: 0.2
-  volumeBaseFogDensity: 0.003
-  volumeHeightFogStrength: 0.11
-  volumeCutFogBoost: 1.55
+  volumeBaseFogDensity: 0
+  volumeHeightFogStrength: 0.008
+  volumeCutFogBoost: 0.95
   volumeNoiseContrast: 1.35
   volumeAbsorptionDensity: 0.18
   volumeEmissionIntensity: 0
@@ -1314,9 +1315,9 @@ MonoBehaviour:
   volumePointLightEnabled: 1
   volumePointLightPositionWS: {x: 1.4, y: 1.6, z: -2.2}
   volumePointLightColor: {r: 1, g: 0.76, b: 0.48, a: 1}
-  volumePointLightIntensity: 18
+  volumePointLightIntensity: 12
   volumePointLightRange: 6
-  volumeExposure: 1.25
+  volumeExposure: 1.2
   volumeColorTint: {r: 1, g: 0.78, b: 0.54, a: 1}
   debugView: 0
   syncEveryFrame: 1
@@ -1341,6 +1342,9 @@ MonoBehaviour:
   manualSize: {x: 4.8, y: 4.8, z: 4.8}
   boundsPadding: 0.35
   minBoundsSize: 0.5
+  useScreenSpaceVolume: 1
+  hideProxyRendererInScreenSpace: 1
+  screenSpaceVisibilityMode: 1
   sortingOrder: 100
   drawBoundsGizmo: 1
   boundsGizmoColor: {r: 1, g: 0.62, b: 0.25, a: 0.35}
@@ -1367,32 +1371,32 @@ MonoBehaviour:
   edgeSoftness: 0.22
   noiseErosion: 0.72
   noiseScale: 1.75
-  coverage: 0.62
+  coverage: 0.48
   softness: 0.2
-  detailStrength: 0.52
+  detailStrength: 0.64
   detailScale: 9
   warpStrength: 0.62
   lobeCount: 16
   lobeSpread: {x: 1.05, y: 0.58, z: 0.95}
   lobeRadius: 0.42
-  densityBoost: 1.75
-  lightIntensity: 4.8
-  lightDensity: 1.35
-  baseFogDensity: 0.001
-  heightFogStrength: 0.04
-  cutFogBoost: 1.15
-  absorptionDensity: 0.2
-  densityThreshold: 0.012
-  alphaClipThreshold: 0.006
-  exposure: 1.55
+  densityBoost: 0.95
+  lightIntensity: 2.8
+  lightDensity: 0.82
+  baseFogDensity: 0
+  heightFogStrength: 0.008
+  cutFogBoost: 0.95
+  absorptionDensity: 0.18
+  densityThreshold: 0.045
+  alphaClipThreshold: 0.012
+  exposure: 1.2
   colorTint: {r: 1, g: 0.78, b: 0.56, a: 1}
-  emissionIntensity: 0.08
+  emissionIntensity: 0
   emissionColor: {r: 1, g: 0.62, b: 0.22, a: 1}
   enableWarmCoreLight: 1
   warmCoreLocalPosition: {x: -0.15, y: 0.18, z: -0.35}
   warmCoreColor: {r: 1, g: 0.68, b: 0.28, a: 1}
-  warmCoreIntensity: 28
-  warmCoreRange: 5.8
+  warmCoreIntensity: 18
+  warmCoreRange: 4.8
   warmCoreOrbitRadius: 0.18
   warmCoreOrbitSpeed: 18
 --- !u!1660057539 &9223372036854775807
