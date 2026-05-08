@@ -23,7 +23,8 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         VolumeSigmaA = 12,
         VolumeSigmaS = 13,
         VolumeSigmaT = 14,
-        VolumeShapeMask = 15
+        VolumeShapeMask = 15,
+        SurfaceAmbientOcclusion = 16
     }
 
     [Header("References")]
@@ -718,6 +719,9 @@ public class SdfValidationEnvironmentController : MonoBehaviour
                 break;
             case ValidationMode.CutSurface:
                 debugView = SdfPhase1Driver.DebugViewMode.CutDominance;
+                break;
+            case ValidationMode.SurfaceAmbientOcclusion:
+                debugView = SdfPhase1Driver.DebugViewMode.SurfaceAmbientOcclusion;
                 break;
             case ValidationMode.Volume:
                 debugView = SdfPhase1Driver.DebugViewMode.VolumeLight;

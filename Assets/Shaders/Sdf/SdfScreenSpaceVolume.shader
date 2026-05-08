@@ -88,6 +88,8 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
             float _VolumeLightShadowStrength;
             float _VolumeLightShadowBias;
             float _VolumeLightSurfaceFadeDistance;
+            float _VolumeSurfaceOcclusionStrength;
+            float _VolumeSurfaceOcclusionRadius;
             float _VolumeLightPlaneBand;
             float _VolumeLightRemovedDepth;
             float _VolumeLightShapeDepth;
@@ -533,6 +535,19 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 return 1.0;
             }
 
+            float EvaluateSceneSurfaceOcclusion(float3 samplePosition)
+            {
+                if (_SdfShadowSceneShapeCount <= 0 || _VolumeSurfaceOcclusionStrength <= 0.0)
+                {
+                    return 1.0;
+                }
+
+                float radius = max(_VolumeSurfaceOcclusionRadius, _HitEpsilon);
+                float surfaceDistance = max(ShadowSceneMap(samplePosition), 0.0);
+                float proximity = 1.0 - smoothstep(0.0, radius, surfaceDistance);
+                return saturate(1.0 - proximity * saturate(_VolumeSurfaceOcclusionStrength));
+            }
+
             float TraceVolumeMediaTransmittance(float3 shadowOrigin, float3 lightDir, float maxShadowDistance)
             {
                 if (maxShadowDistance <= _HitEpsilon)
@@ -670,6 +685,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                     if (sigmaT <= 1e-5 && dot(emissionRadiance, float3(0.2126, 0.7152, 0.0722)) <= 1e-5) continue;
 
                     float3 samplePositionWS = VolumeToWorld(samplePosition);
+                    float surfaceOcclusion = EvaluateSceneSurfaceOcclusion(samplePosition);
                     float3 sourceRadiance = 0.0;
                     float weightedShadow = 0.0;
                     float weightedGeometryShadow = 0.0;
@@ -708,7 +724,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                     }
 
                     float segmentTransmittance = exp(-sigmaT * stepLengthWS);
-                    float3 sourceTerm = sourceRadiance * max(_VolumeLightIntensity, 0.0) * sigmaS + emissionRadiance;
+                    float3 sourceTerm = (sourceRadiance * surfaceOcclusion) * max(_VolumeLightIntensity, 0.0) * sigmaS + emissionRadiance * surfaceOcclusion;
                     float sourceIntegral = sigmaT > 1e-5 ? (1.0 - segmentTransmittance) / sigmaT : stepLengthWS;
                     terms.scattering += transmittance * sourceTerm * sourceIntegral;
                     scatteringVisibilityAccumulation += transmittance * dot(sourceTerm, float3(0.2126, 0.7152, 0.0722)) * stepLengthWS;

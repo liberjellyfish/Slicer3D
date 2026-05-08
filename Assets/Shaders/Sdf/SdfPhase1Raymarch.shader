@@ -20,6 +20,10 @@ Shader "Custom/Sdf/Phase1Raymarch"
         _SdfSoftShadowDistanceFadeStart ("SDF Soft Shadow Distance Fade Start", Range(0.0, 1.0)) = 0.7
         _SdfSoftShadowSceneStrength ("SDF Soft Shadow Scene Strength", Range(0.0, 1.0)) = 0.55
         _SdfSoftShadowSelfIgnoreDistance ("SDF Soft Shadow Self Ignore Distance", Float) = 0.035
+        _SdfAmbientOcclusionStrength ("SDF Ambient Occlusion Strength", Range(0.0, 1.0)) = 0.45
+        _SdfAmbientOcclusionRadius ("SDF Ambient Occlusion Radius", Float) = 0.18
+        _SdfAmbientOcclusionSteps ("SDF Ambient Occlusion Steps", Range(1, 8)) = 4
+        _SdfAmbientOcclusionBias ("SDF Ambient Occlusion Bias", Float) = 0.004
 
         [Header(Cut Surface)]
         _CutFaceColor ("Cut Face Color", Color) = (0.97, 0.43, 0.31, 1.0)
@@ -110,7 +114,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
         [HideInInspector] _ProxyBoundsMax ("Proxy Bounds Max", Vector) = (0.5, 0.5, 0.5, 0.0)
 
         [Header(Debug)]
-        _DebugView ("Debug View", Range(0, 17)) = 0
+        _DebugView ("Debug View", Range(0, 18)) = 0
     }
 
     SubShader
@@ -168,6 +172,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float cutDominanceMask;
                 float edgeMask;
                 float cutOcclusion;
+                float ambientOcclusion;
                 float cutInteriorDepth;
                 float3 cutNormalOS;
                 float dominantPlaneDistance;
@@ -236,6 +241,10 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float _SdfSoftShadowDistanceFadeStart;
                 float _SdfSoftShadowSceneStrength;
                 float _SdfSoftShadowSelfIgnoreDistance;
+                float _SdfAmbientOcclusionStrength;
+                float _SdfAmbientOcclusionRadius;
+                float _SdfAmbientOcclusionSteps;
+                float _SdfAmbientOcclusionBias;
                 float4 _CutFaceColor;
                 float _CutFaceBlend;
                 float _CutFaceDominanceSoftness;
@@ -603,6 +612,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 surfaceData.cutDominanceMask = 0.0;
                 surfaceData.edgeMask = 0.0;
                 surfaceData.cutOcclusion = 1.0;
+                surfaceData.ambientOcclusion = 1.0;
                 surfaceData.cutInteriorDepth = 0.0;
                 surfaceData.cutNormalOS = float3(0.0, 1.0, 0.0);
                 surfaceData.dominantPlaneDistance = 1e20;
@@ -671,6 +681,45 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 );
 
                 return normalize(gradient);
+            }
+
+            float SampleSdfAmbientOcclusion(float3 p, float3 normalOS)
+            {
+                float strength = saturate(_SdfAmbientOcclusionStrength);
+                if (strength <= 0.0)
+                {
+                    return 1.0;
+                }
+
+                int stepCount = min(max((int)round(_SdfAmbientOcclusionSteps), 1), 8);
+                float radius = max(_SdfAmbientOcclusionRadius, _HitEpsilon * 2.0);
+                float bias = max(_SdfAmbientOcclusionBias, _HitEpsilon);
+                float occlusion = 0.0;
+                float weightSum = 0.0;
+
+                [loop]
+                for (int i = 0; i < 8; i++)
+                {
+                    if (i >= stepCount)
+                    {
+                        break;
+                    }
+
+                    float sample01 = (i + 1.0) / stepCount;
+                    float sampleDistance = bias + radius * sample01 * sample01;
+                    float3 samplePosition = p + normalOS * sampleDistance;
+                    float expectedDistance = sampleDistance - bias;
+                    float sampledDistance = _SdfShadowSceneShapeCount > 0
+                        ? ShadowSceneMap(samplePosition)
+                        : Map(samplePosition);
+                    float sampleOcclusion = saturate((expectedDistance - sampledDistance) / max(radius, 1e-4));
+                    float weight = 1.0 - sample01 * 0.65;
+                    occlusion += sampleOcclusion * weight;
+                    weightSum += weight;
+                }
+
+                occlusion = weightSum > 0.0 ? occlusion / weightSum : 0.0;
+                return saturate(1.0 - occlusion * strength);
             }
 
             bool IntersectProxyBounds(float3 rayOriginOS, float3 rayDirOS, out float tEnter, out float tExit)
@@ -1246,14 +1295,17 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 shadowTerms = EvaluateShadowTerms(hitPositionOS, normalOS, lightDirWS, mainLightShadow);
                 float cutMask = saturate(surfaceData.cutMask);
                 float cutOcclusion = lerp(1.0, surfaceData.cutOcclusion, cutMask);
+                float ambientOcclusion = saturate(surfaceData.ambientOcclusion);
+                float directOcclusion = lerp(1.0, ambientOcclusion, 0.32);
+                float indirectOcclusion = ambientOcclusion;
 
                 float3 surfaceColor = ComposeSurfaceColor(surfaceData);
 
-                float3 ambient = surfaceColor * _AmbientStrength * cutOcclusion;
-                float3 diffuse = surfaceColor * mainLight.color * (ndotl * _DiffuseStrength * shadowTerms.totalShadow) * cutOcclusion;
+                float3 ambient = surfaceColor * _AmbientStrength * cutOcclusion * indirectOcclusion;
+                float3 diffuse = surfaceColor * mainLight.color * (ndotl * _DiffuseStrength * shadowTerms.totalShadow) * cutOcclusion * directOcclusion;
                 float3 edgeAccentColor = lerp(_CutFaceColor.rgb, mainLight.color, 0.5);
                 float edgeLight = lerp(0.35, 1.0, shadowTerms.totalShadow);
-                float3 edgeAccent = surfaceData.edgeMask * _CutFaceEdgeBoost * edgeAccentColor * edgeLight;
+                float3 edgeAccent = surfaceData.edgeMask * _CutFaceEdgeBoost * edgeAccentColor * edgeLight * directOcclusion;
 
                 return ambient + diffuse + edgeAccent;
             }
@@ -1505,6 +1557,11 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     return saturate(volumeTerms.shapeMaskDebug).xxx;
                 }
 
+                if (debugView == 18)
+                {
+                    return saturate(surfaceData.ambientOcclusion).xxx;
+                }
+
                 return 0.0;
             }
 
@@ -1600,6 +1657,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 surfaceData.cutDominanceMask = 0.0;
                 surfaceData.edgeMask = 0.0;
                 surfaceData.cutOcclusion = 1.0;
+                surfaceData.ambientOcclusion = 1.0;
                 surfaceData.cutInteriorDepth = 0.0;
                 surfaceData.cutNormalOS = float3(0.0, 1.0, 0.0);
                 surfaceData.dominantPlaneDistance = 1e20;
@@ -1641,6 +1699,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                         surfaceData = EvaluateSurfaceData(hitPositionOS);
                         float3 estimatedNormalOS = EstimateNormalOS(hitPositionOS);
                         float3 normalOS = ResolveSurfaceNormalOS(estimatedNormalOS, surfaceData);
+                        surfaceData.ambientOcclusion = SampleSdfAmbientOcclusion(hitPositionOS, normalOS);
                         float3 hitPositionWS = TransformObjectToWorld(hitPositionOS);
                         normalWS = normalize(TransformObjectToWorldNormal(normalOS));
                         outDepth = ComputeNormalizedDeviceCoordinatesWithZ(hitPositionWS, GetWorldToHClipMatrix()).z;

@@ -31,7 +31,8 @@ public class SdfPhase1Driver : MonoBehaviour
         VolumeSigmaS = 14,
         VolumeSigmaT = 15,
         SdfSoftShadowReadable = 16,
-        VolumeShapeMask = 17
+        VolumeShapeMask = 17,
+        SurfaceAmbientOcclusion = 18
     }
 
     public enum VolumePreset
@@ -90,6 +91,10 @@ public class SdfPhase1Driver : MonoBehaviour
     [SerializeField] [Range(0.0f, 1.0f)] private float sdfSoftShadowDistanceFadeStart = 0.7f;
     [SerializeField] [Range(0.0f, 1.0f)] private float sdfSoftShadowSceneStrength = 0.55f;
     [SerializeField] [Min(0.0f)] private float sdfSoftShadowSelfIgnoreDistance = 0.035f;
+    [SerializeField] [Range(0.0f, 1.0f)] private float sdfAmbientOcclusionStrength = 0.45f;
+    [SerializeField] [Min(0.001f)] private float sdfAmbientOcclusionRadius = 0.18f;
+    [SerializeField] [Range(1, 8)] private int sdfAmbientOcclusionSteps = 4;
+    [SerializeField] [Min(0.0f)] private float sdfAmbientOcclusionBias = 0.004f;
 
     [Header("Cut Surface")]
     [SerializeField] private Color cutFaceColor = new Color(0.97f, 0.43f, 0.31f, 1.0f);
@@ -154,6 +159,8 @@ public class SdfPhase1Driver : MonoBehaviour
     [Header("Volume Shadow")]
     [SerializeField] [Range(4, 64)] private int volumeShadowSamples = 16;
     [SerializeField] [Min(0.05f)] private float volumeShadowMaxDistance = 2.0f;
+    [SerializeField] [Range(0.0f, 1.0f)] private float volumeSurfaceOcclusionStrength = 0.28f;
+    [SerializeField] [Min(0.001f)] private float volumeSurfaceOcclusionRadius = 0.22f;
 
     [Header("Volume Point Light")]
     [SerializeField] private bool volumePointLightEnabled = true;
@@ -187,6 +194,10 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int SdfSoftShadowDistanceFadeStartId = Shader.PropertyToID("_SdfSoftShadowDistanceFadeStart");
     private static readonly int SdfSoftShadowSceneStrengthId = Shader.PropertyToID("_SdfSoftShadowSceneStrength");
     private static readonly int SdfSoftShadowSelfIgnoreDistanceId = Shader.PropertyToID("_SdfSoftShadowSelfIgnoreDistance");
+    private static readonly int SdfAmbientOcclusionStrengthId = Shader.PropertyToID("_SdfAmbientOcclusionStrength");
+    private static readonly int SdfAmbientOcclusionRadiusId = Shader.PropertyToID("_SdfAmbientOcclusionRadius");
+    private static readonly int SdfAmbientOcclusionStepsId = Shader.PropertyToID("_SdfAmbientOcclusionSteps");
+    private static readonly int SdfAmbientOcclusionBiasId = Shader.PropertyToID("_SdfAmbientOcclusionBias");
     private static readonly int CutFaceColorId = Shader.PropertyToID("_CutFaceColor");
     private static readonly int CutFaceBlendId = Shader.PropertyToID("_CutFaceBlend");
     private static readonly int CutFaceDominanceSoftnessId = Shader.PropertyToID("_CutFaceDominanceSoftness");
@@ -210,6 +221,8 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int VolumeLightShadowStrengthId = Shader.PropertyToID("_VolumeLightShadowStrength");
     private static readonly int VolumeLightShadowBiasId = Shader.PropertyToID("_VolumeLightShadowBias");
     private static readonly int VolumeLightSurfaceFadeDistanceId = Shader.PropertyToID("_VolumeLightSurfaceFadeDistance");
+    private static readonly int VolumeSurfaceOcclusionStrengthId = Shader.PropertyToID("_VolumeSurfaceOcclusionStrength");
+    private static readonly int VolumeSurfaceOcclusionRadiusId = Shader.PropertyToID("_VolumeSurfaceOcclusionRadius");
     private static readonly int VolumeLightPlaneBandId = Shader.PropertyToID("_VolumeLightPlaneBand");
     private static readonly int VolumeLightRemovedDepthId = Shader.PropertyToID("_VolumeLightRemovedDepth");
     private static readonly int VolumeLightShapeDepthId = Shader.PropertyToID("_VolumeLightShapeDepth");
@@ -432,6 +445,8 @@ public class SdfPhase1Driver : MonoBehaviour
         Shader.SetGlobalFloat(VolumeLightShadowStrengthId, volumeLightShadowStrength);
         Shader.SetGlobalFloat(VolumeLightShadowBiasId, volumeLightShadowBias);
         Shader.SetGlobalFloat(VolumeLightSurfaceFadeDistanceId, volumeLightSurfaceFadeDistance);
+        Shader.SetGlobalFloat(VolumeSurfaceOcclusionStrengthId, volumeSurfaceOcclusionStrength);
+        Shader.SetGlobalFloat(VolumeSurfaceOcclusionRadiusId, volumeSurfaceOcclusionRadius);
         Shader.SetGlobalFloat(VolumeLightPlaneBandId, volumeLightPlaneBand);
         Shader.SetGlobalFloat(VolumeLightRemovedDepthId, volumeLightRemovedDepth);
         Shader.SetGlobalFloat(VolumeLightShapeDepthId, volumeLightShapeDepth);
@@ -729,6 +744,10 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(SdfSoftShadowDistanceFadeStartId, sdfSoftShadowDistanceFadeStart);
         propertyBlock.SetFloat(SdfSoftShadowSceneStrengthId, sdfSoftShadowSceneStrength);
         propertyBlock.SetFloat(SdfSoftShadowSelfIgnoreDistanceId, sdfSoftShadowSelfIgnoreDistance);
+        propertyBlock.SetFloat(SdfAmbientOcclusionStrengthId, sdfAmbientOcclusionStrength);
+        propertyBlock.SetFloat(SdfAmbientOcclusionRadiusId, sdfAmbientOcclusionRadius);
+        propertyBlock.SetFloat(SdfAmbientOcclusionStepsId, sdfAmbientOcclusionSteps);
+        propertyBlock.SetFloat(SdfAmbientOcclusionBiasId, sdfAmbientOcclusionBias);
         propertyBlock.SetColor(CutFaceColorId, cutFaceColor);
         propertyBlock.SetFloat(CutFaceBlendId, cutFaceBlend);
         propertyBlock.SetFloat(CutFaceDominanceSoftnessId, cutFaceDominanceSoftness);
@@ -758,6 +777,8 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(VolumeLightShadowStrengthId, volumeLightShadowStrength);
         propertyBlock.SetFloat(VolumeLightShadowBiasId, volumeLightShadowBias);
         propertyBlock.SetFloat(VolumeLightSurfaceFadeDistanceId, volumeLightSurfaceFadeDistance);
+        propertyBlock.SetFloat(VolumeSurfaceOcclusionStrengthId, volumeSurfaceOcclusionStrength);
+        propertyBlock.SetFloat(VolumeSurfaceOcclusionRadiusId, volumeSurfaceOcclusionRadius);
         propertyBlock.SetFloat(VolumeLightPlaneBandId, volumeLightPlaneBand);
         propertyBlock.SetFloat(VolumeLightRemovedDepthId, volumeLightRemovedDepth);
         propertyBlock.SetFloat(VolumeLightShapeDepthId, volumeLightShapeDepth);

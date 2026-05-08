@@ -1075,6 +1075,12 @@ MonoBehaviour:
   sdfSoftShadowMinStepScale: 1
   sdfSoftShadowMaxStepFraction: 0.2
   sdfSoftShadowDistanceFadeStart: 0.7
+  sdfSoftShadowSceneStrength: 0.55
+  sdfSoftShadowSelfIgnoreDistance: 0.035
+  sdfAmbientOcclusionStrength: 0.45
+  sdfAmbientOcclusionRadius: 0.18
+  sdfAmbientOcclusionSteps: 4
+  sdfAmbientOcclusionBias: 0.004
   cutFaceColor: {r: 0.97, g: 0.43, b: 0.31, a: 1}
   cutFaceBlend: 0.85
   cutFaceDominanceSoftness: 0.01
@@ -1110,6 +1116,8 @@ MonoBehaviour:
   volumeEmissionColor: {r: 0, g: 0, b: 0, a: 1}
   volumeShadowSamples: 18
   volumeShadowMaxDistance: 2.1
+  volumeSurfaceOcclusionStrength: 0.28
+  volumeSurfaceOcclusionRadius: 0.22
   volumePointLightEnabled: 1
   volumePointLightPositionWS: {x: 1.4, y: 1.6, z: -2.2}
   volumePointLightColor: {r: 1, g: 0.76, b: 0.48, a: 1}
@@ -1277,6 +1285,12 @@ MonoBehaviour:
   sdfSoftShadowMinStepScale: 1
   sdfSoftShadowMaxStepFraction: 0.2
   sdfSoftShadowDistanceFadeStart: 0.7
+  sdfSoftShadowSceneStrength: 0.55
+  sdfSoftShadowSelfIgnoreDistance: 0.035
+  sdfAmbientOcclusionStrength: 0.45
+  sdfAmbientOcclusionRadius: 0.18
+  sdfAmbientOcclusionSteps: 4
+  sdfAmbientOcclusionBias: 0.004
   cutFaceColor: {r: 0.97, g: 0.43, b: 0.31, a: 1}
   cutFaceBlend: 0.85
   cutFaceDominanceSoftness: 0.01
@@ -1312,6 +1326,8 @@ MonoBehaviour:
   volumeEmissionColor: {r: 0, g: 0, b: 0, a: 1}
   volumeShadowSamples: 18
   volumeShadowMaxDistance: 2.1
+  volumeSurfaceOcclusionStrength: 0.28
+  volumeSurfaceOcclusionRadius: 0.22
   volumePointLightEnabled: 1
   volumePointLightPositionWS: {x: 1.4, y: 1.6, z: -2.2}
   volumePointLightColor: {r: 1, g: 0.76, b: 0.48, a: 1}
