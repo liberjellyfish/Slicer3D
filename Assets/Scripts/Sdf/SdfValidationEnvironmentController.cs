@@ -423,6 +423,14 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         }
 
         RefreshDrivers();
+        if (sharedVolumeProxy != null)
+        {
+            sharedVolumeProxy.ApplyVolumePreset(volumePreset);
+            ApplySharedVolumeCloudController();
+            ApplySurfaceOnlyToDrivers();
+            return;
+        }
+
         if (sdfDrivers == null)
         {
             return;
@@ -430,17 +438,10 @@ public class SdfValidationEnvironmentController : MonoBehaviour
 
         for (int i = 0; i < sdfDrivers.Length; i++)
         {
-            if (sdfDrivers[i] == null)
+            if (sdfDrivers[i] != null)
             {
-                continue;
+                sdfDrivers[i].ApplyVolumePreset(volumePreset);
             }
-
-            sdfDrivers[i].ApplyVolumePreset(volumePreset);
-        }
-
-        if (sharedVolumeProxy != null)
-        {
-            sharedVolumeProxy.ApplyVolumePreset(volumePreset);
         }
     }
 
@@ -453,11 +454,6 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         }
 
         RefreshDrivers();
-        if (sdfDrivers == null || sdfDrivers.Length <= 0)
-        {
-            return;
-        }
-
         if (sharedVolumeProxy != null)
         {
             sharedVolumeProxy.SetSurfaceDrivers(sdfDrivers);
@@ -466,16 +462,12 @@ public class SdfValidationEnvironmentController : MonoBehaviour
                 sharedVolumeProxy.VolumeDriver.SetVolumeContributionMode(SdfPhase1Driver.VolumeContributionMode.VolumeOnly);
             }
 
-            for (int i = 0; i < sdfDrivers.Length; i++)
-            {
-                if (sdfDrivers[i] == null)
-                {
-                    continue;
-                }
+            ApplySurfaceOnlyToDrivers();
+            return;
+        }
 
-                sdfDrivers[i].SetVolumeContributionMode(nonOwnerVolumeContributionMode);
-            }
-
+        if (sdfDrivers == null || sdfDrivers.Length <= 0)
+        {
             return;
         }
 
@@ -491,6 +483,38 @@ public class SdfValidationEnvironmentController : MonoBehaviour
                 ? SdfPhase1Driver.VolumeContributionMode.Full
                 : nonOwnerVolumeContributionMode;
             sdfDrivers[i].SetVolumeContributionMode(mode);
+        }
+    }
+
+    private void ApplySurfaceOnlyToDrivers()
+    {
+        if (sdfDrivers == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < sdfDrivers.Length; i++)
+        {
+            if (sdfDrivers[i] == null)
+            {
+                continue;
+            }
+
+            sdfDrivers[i].SetVolumeContributionMode(SdfPhase1Driver.VolumeContributionMode.SurfaceOnly);
+        }
+    }
+
+    private void ApplySharedVolumeCloudController()
+    {
+        if (sharedVolumeProxy == null)
+        {
+            return;
+        }
+
+        SdfCloudVolumeController cloudController = sharedVolumeProxy.GetComponent<SdfCloudVolumeController>();
+        if (cloudController != null)
+        {
+            cloudController.ApplyToDriver();
         }
     }
 
@@ -724,7 +748,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
                 break;
         }
 
-        ApplyDebugView(debugView);
+        ApplyDebugView(debugView, IsVolumeValidationMode(mode));
     }
 
     private void HandleRuntimeDebugHotkeys()
@@ -765,7 +789,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         ApplyCurrentMode();
     }
 
-    private void ApplyDebugView(SdfPhase1Driver.DebugViewMode debugView)
+    private void ApplyDebugView(SdfPhase1Driver.DebugViewMode debugView, bool volumeMode)
     {
         RefreshDrivers();
         if (sharedVolumeProxy != null && sharedVolumeProxy.VolumeDriver != null)
@@ -785,7 +809,9 @@ public class SdfValidationEnvironmentController : MonoBehaviour
                 continue;
             }
 
-            sdfDrivers[i].SetDebugView(debugView);
+            sdfDrivers[i].SetDebugView(volumeMode && sharedVolumeProxy != null
+                ? SdfPhase1Driver.DebugViewMode.Lighting
+                : debugView);
         }
     }
 

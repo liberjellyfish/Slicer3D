@@ -1165,6 +1165,7 @@ GameObject:
   - component: {fileID: 1917404102}
   - component: {fileID: 1917404105}
   - component: {fileID: 1917404106}
+  - component: {fileID: 1917404107}
   m_Layer: 6
   m_Name: SdfSharedVolumeProxy
   m_TagString: Untagged
@@ -1334,6 +1335,7 @@ MonoBehaviour:
   autoFindSurfaceDrivers: 1
   surfaceDrivers:
   - {fileID: 1680505283}
+  forceSurfaceDriversToSurfaceOnly: 1
   autoFitBounds: 1
   manualCenter: {x: 0, y: 0, z: 0}
   manualSize: {x: 4.8, y: 4.8, z: 4.8}
@@ -1342,6 +1344,57 @@ MonoBehaviour:
   sortingOrder: 100
   drawBoundsGizmo: 1
   boundsGizmoColor: {r: 1, g: 0.62, b: 0.25, a: 0.35}
+--- !u!114 &1917404107
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1917404101}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 71e6b73105914f349a29f591b4bc8dd5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  sharedVolumeProxy: {fileID: 1917404106}
+  volumeDriver: {fileID: 1917404105}
+  profile: 1
+  applyOnEnable: 1
+  applyOnValidate: 1
+  refreshProfileDefaultsOnValidate: 0
+  animateWarmCoreLightInPlayMode: 0
+  shapeExtents: {x: 0.78, y: 0.62, z: 0.72}
+  edgeSoftness: 0.22
+  noiseErosion: 0.72
+  noiseScale: 1.75
+  coverage: 0.62
+  softness: 0.2
+  detailStrength: 0.52
+  detailScale: 9
+  warpStrength: 0.62
+  lobeCount: 16
+  lobeSpread: {x: 1.05, y: 0.58, z: 0.95}
+  lobeRadius: 0.42
+  densityBoost: 1.75
+  lightIntensity: 4.8
+  lightDensity: 1.35
+  baseFogDensity: 0.001
+  heightFogStrength: 0.04
+  cutFogBoost: 1.15
+  absorptionDensity: 0.2
+  densityThreshold: 0.012
+  alphaClipThreshold: 0.006
+  exposure: 1.55
+  colorTint: {r: 1, g: 0.78, b: 0.56, a: 1}
+  emissionIntensity: 0.08
+  emissionColor: {r: 1, g: 0.62, b: 0.22, a: 1}
+  enableWarmCoreLight: 1
+  warmCoreLocalPosition: {x: -0.15, y: 0.18, z: -0.35}
+  warmCoreColor: {r: 1, g: 0.68, b: 0.28, a: 1}
+  warmCoreIntensity: 28
+  warmCoreRange: 5.8
+  warmCoreOrbitRadius: 0.18
+  warmCoreOrbitSpeed: 18
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

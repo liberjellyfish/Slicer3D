@@ -13,6 +13,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     [Header("Scene SDF Source")]
     [SerializeField] private bool autoFindSurfaceDrivers = true;
     [SerializeField] private SdfPhase1Driver[] surfaceDrivers = Array.Empty<SdfPhase1Driver>();
+    [SerializeField] private bool forceSurfaceDriversToSurfaceOnly = true;
 
     [Header("Bounds")]
     [SerializeField] private bool autoFitBounds = true;
@@ -55,6 +56,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
         CacheComponents();
         ConfigureVolumeDriver();
         RefreshSurfaceDriversIfNeeded();
+        ApplySurfaceDriverOwnership();
         ApplyBounds();
         UploadSceneSdfData();
     }
@@ -64,6 +66,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
         manualSize = MaxComponents(manualSize, Vector3.one * minBoundsSize);
         CacheComponents();
         ConfigureVolumeDriver();
+        ApplySurfaceDriverOwnership();
         ApplyBounds();
         UploadSceneSdfData();
     }
@@ -73,6 +76,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
         CacheComponents();
         ConfigureVolumeDriver();
         RefreshSurfaceDriversIfNeeded();
+        ApplySurfaceDriverOwnership();
         ApplyBounds();
         UploadSceneSdfData();
     }
@@ -91,6 +95,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     {
         CacheComponents();
         surfaceDrivers = drivers ?? Array.Empty<SdfPhase1Driver>();
+        ApplySurfaceDriverOwnership();
         UploadSceneSdfData();
     }
 
@@ -136,6 +141,25 @@ public class SdfSharedVolumeProxy : MonoBehaviour
             cachedRenderer.sortingOrder = sortingOrder;
             cachedRenderer.shadowCastingMode = ShadowCastingMode.Off;
             cachedRenderer.receiveShadows = false;
+        }
+    }
+
+    private void ApplySurfaceDriverOwnership()
+    {
+        if (!forceSurfaceDriversToSurfaceOnly || surfaceDrivers == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < surfaceDrivers.Length; i++)
+        {
+            SdfPhase1Driver driver = surfaceDrivers[i];
+            if (!SdfSceneDriverUtility.IsRenderableSurfaceDriver(driver, volumeDriver))
+            {
+                continue;
+            }
+
+            driver.SetVolumeContributionMode(SdfPhase1Driver.VolumeContributionMode.SurfaceOnly);
         }
     }
 

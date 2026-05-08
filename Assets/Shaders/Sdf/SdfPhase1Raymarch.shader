@@ -60,6 +60,8 @@ Shader "Custom/Sdf/Phase1Raymarch"
         _VolumeCutFogBoost ("Volume Cut Fog Boost", Range(0.0, 4.0)) = 1.4
         _VolumeNoiseContrast ("Volume Noise Contrast", Range(0.25, 4.0)) = 1.25
         _VolumeAbsorptionDensity ("Volume Absorption Density", Range(0.0, 8.0)) = 0.18
+        _VolumeDensityThreshold ("Volume Density Threshold", Range(0.0, 0.2)) = 0.012
+        _VolumeAlphaClipThreshold ("Volume Alpha Clip Threshold", Range(0.0, 0.05)) = 0.006
         _VolumeEmissionIntensity ("Volume Emission Intensity", Range(0.0, 4.0)) = 0.0
         _VolumeEmissionColor ("Volume Emission Color", Color) = (0.0, 0.0, 0.0, 1.0)
         _VolumeFogShapeMode ("Volume Fog Shape Mode (0 Box / 1 Ellipsoid / 2 CapsuleY / 3 Cloud)", Range(0, 3)) = 3
@@ -70,6 +72,15 @@ Shader "Custom/Sdf/Phase1Raymarch"
         _VolumeFogShapeEdgeSoftness ("Volume Fog Shape Edge Softness", Float) = 0.12
         _VolumeFogShapeNoiseErosion ("Volume Fog Shape Noise Erosion", Range(0.0, 1.0)) = 0.22
         _VolumeFogShapeNoiseScale ("Volume Fog Shape Noise Scale", Float) = 2.2
+        _VolumeCloudCoverage ("Volume Cloud Coverage", Range(0.0, 1.0)) = 0.42
+        _VolumeCloudSoftness ("Volume Cloud Softness", Range(0.01, 1.0)) = 0.28
+        _VolumeCloudDetailStrength ("Volume Cloud Detail Strength", Range(0.0, 1.0)) = 0.32
+        _VolumeCloudDetailScale ("Volume Cloud Detail Scale", Float) = 7.0
+        _VolumeCloudWarpStrength ("Volume Cloud Warp Strength", Range(0.0, 1.5)) = 0.35
+        _VolumeCloudLobeCount ("Volume Cloud Lobe Count", Range(1, 24)) = 12
+        _VolumeCloudLobeSpread ("Volume Cloud Lobe Spread", Vector) = (0.95, 0.62, 0.9, 0.0)
+        _VolumeCloudLobeRadius ("Volume Cloud Lobe Radius", Range(0.05, 1.0)) = 0.34
+        _VolumeCloudDensityBoost ("Volume Cloud Density Boost", Range(0.0, 4.0)) = 1.25
         _VolumeShadowSamples ("Volume Shadow Samples", Range(4, 64)) = 16
         _VolumeShadowMaxDistance ("Volume Shadow Max Distance", Float) = 2.0
         _VolumePointLightEnabled ("Volume Point Light Enabled", Range(0.0, 1.0)) = 0.0
@@ -118,7 +129,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
 
             Cull Back
             ZWrite On
-            Blend SrcAlpha OneMinusSrcAlpha
+            Blend One OneMinusSrcAlpha
 
             HLSLPROGRAM
             #pragma target 4.5
@@ -259,6 +270,8 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float _VolumeCutFogBoost;
                 float _VolumeNoiseContrast;
                 float _VolumeAbsorptionDensity;
+                float _VolumeDensityThreshold;
+                float _VolumeAlphaClipThreshold;
                 float _VolumeEmissionIntensity;
                 float4 _VolumeEmissionColor;
                 float _VolumeFogShapeMode;
@@ -269,6 +282,15 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float _VolumeFogShapeEdgeSoftness;
                 float _VolumeFogShapeNoiseErosion;
                 float _VolumeFogShapeNoiseScale;
+                float _VolumeCloudCoverage;
+                float _VolumeCloudSoftness;
+                float _VolumeCloudDetailStrength;
+                float _VolumeCloudDetailScale;
+                float _VolumeCloudWarpStrength;
+                float _VolumeCloudLobeCount;
+                float4 _VolumeCloudLobeSpread;
+                float _VolumeCloudLobeRadius;
+                float _VolumeCloudDensityBoost;
                 float _VolumeShadowSamples;
                 float _VolumeShadowMaxDistance;
                 float _VolumePointLightEnabled;
@@ -823,6 +845,59 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return lerp(nxy0, nxy1, u.z);
             }
 
+            float Fbm3D(float3 p)
+            {
+                float value = 0.0;
+                float amplitude = 0.5;
+                float frequency = 1.0;
+                value += ValueNoise3D(p * frequency) * amplitude;
+                frequency *= 2.03;
+                amplitude *= 0.5;
+                value += ValueNoise3D(p * frequency + 17.13) * amplitude;
+                frequency *= 2.11;
+                amplitude *= 0.5;
+                value += ValueNoise3D(p * frequency + 41.71) * amplitude;
+                frequency *= 2.07;
+                amplitude *= 0.5;
+                value += ValueNoise3D(p * frequency + 83.19) * amplitude;
+                return saturate(value / 0.9375);
+            }
+
+            float EvaluateCloudLobeMask(float3 localP, float3 extents)
+            {
+                float3 normalizedP = localP / max(extents, float3(1e-4, 1e-4, 1e-4));
+                float3 spread = max(_VolumeCloudLobeSpread.xyz, float3(0.0, 0.0, 0.0));
+                float baseRadius = max(_VolumeCloudLobeRadius, 0.05);
+                int lobeCount = min(max((int)round(_VolumeCloudLobeCount), 1), 24);
+                float lobeMask = 0.0;
+
+                [loop]
+                for (int lobeIndex = 0; lobeIndex < 24; lobeIndex++)
+                {
+                    if (lobeIndex >= lobeCount)
+                    {
+                        break;
+                    }
+
+                    float index = (float)lobeIndex;
+                    float3 seed = float3(index * 19.17 + 3.11, index * 41.73 + 7.61, index * 73.31 + 13.97);
+                    float3 center = float3(
+                        ValueNoise3D(seed + 11.3),
+                        ValueNoise3D(seed + 29.7),
+                        ValueNoise3D(seed + 53.1)) * 2.0 - 1.0;
+                    center *= spread;
+                    center.y *= 0.75;
+
+                    float radiusJitter = lerp(0.68, 1.28, ValueNoise3D(seed + 91.4));
+                    float radius = baseRadius * radiusJitter;
+                    float3 lobeDelta = (normalizedP - center) / max(radius, 1e-4);
+                    float lobe = 1.0 - smoothstep(0.55, 1.18, length(lobeDelta));
+                    lobeMask = max(lobeMask, lobe);
+                }
+
+                return saturate(lobeMask);
+            }
+
             float EvaluateProxyBoundaryFade(float3 p)
             {
                 float3 distanceToMin = p - _ProxyBoundsMin.xyz;
@@ -864,8 +939,40 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     ? SdVolumeCapsuleY(localP, _VolumeFogShapeRadius, _VolumeFogShapeHeight)
                     : SdVolumeEllipsoid(localP, extents);
 
+                if (mode == 3)
+                {
+                    float edgeSoftness = max(_VolumeFogShapeEdgeSoftness, _HitEpsilon);
+                    float baseShapeMask = 1.0 - smoothstep(0.0, edgeSoftness, signedDistance);
+                    float lobeMask = EvaluateCloudLobeMask(localP, extents);
+                    float height01 = saturate(localP.y / max(extents.y, 1e-4) * 0.5 + 0.5);
+                    float heightFade = smoothstep(0.02, 0.18, height01) * (1.0 - smoothstep(0.82, 0.98, height01));
+                    float3 drift = float3(0.29, 0.47, 0.61) * (_Time.y * _VolumeLightNoiseDrift);
+                    float baseScale = max(_VolumeFogShapeNoiseScale, 0.1);
+                    float maxExtent = max(extents.x, max(extents.y, extents.z));
+                    float3 warpSeed = localP * baseScale + drift;
+                    float3 warp = float3(
+                        ValueNoise3D(warpSeed + 13.1),
+                        ValueNoise3D(warpSeed + 37.7),
+                        ValueNoise3D(warpSeed + 71.3)) * 2.0 - 1.0;
+                    float3 cloudP = (localP + warp * maxExtent * 0.2 * saturate(_VolumeCloudWarpStrength / 1.5)) * baseScale + drift;
+                    float lowFrequency = Fbm3D(cloudP);
+                    float detailScale = max(_VolumeCloudDetailScale, 0.1);
+                    float detail = Fbm3D(localP * detailScale + drift * 1.7);
+                    float coverageThreshold = lerp(0.78, 0.28, saturate(_VolumeCloudCoverage));
+                    float cloudSoftness = max(_VolumeCloudSoftness, 0.01);
+                    float cloudMask = smoothstep(coverageThreshold - cloudSoftness, coverageThreshold + cloudSoftness, lowFrequency);
+                    float detailErosion = smoothstep(0.42, 0.92, detail) * saturate(_VolumeCloudDetailStrength);
+                    float edgeWeight = 1.0 - smoothstep(-edgeSoftness * 2.5, -edgeSoftness * 0.25, signedDistance);
+                    cloudMask *= 1.0 - detailErosion * lerp(0.35, 0.85, edgeWeight);
+                    float erosion = saturate(_VolumeFogShapeNoiseErosion);
+                    float cloudInfluence = saturate(0.45 + erosion * 0.75);
+                    float lobeBody = saturate(max(lobeMask, baseShapeMask * 0.25));
+                    float carvedMask = lerp(baseShapeMask, lobeBody * cloudMask, cloudInfluence);
+                    return saturate(carvedMask * heightFade);
+                }
+
                 float erosion = saturate(_VolumeFogShapeNoiseErosion);
-                if (mode == 3 || erosion > 0.0)
+                if (erosion > 0.0)
                 {
                     float3 noiseP = localP * max(_VolumeFogShapeNoiseScale, 0.1);
                     noiseP += float3(0.29, 0.47, 0.61) * (_Time.y * _VolumeLightNoiseDrift);
@@ -959,8 +1066,13 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float contrastNoise = smoothstep(0.2, 0.95, contrastPivot);
                 float noiseMask = lerp(1.0, 0.45 + contrastNoise * 0.95, saturate(_VolumeLightNoiseStrength));
 
-                float baseFog = _VolumeBaseFogDensity;
-                float density = (baseFog + heightFog * localVolumeMask + shapeBand * 0.2 + cutBand * _VolumeCutFogBoost) * noiseMask * boundaryFade * volumeShapeMask;
+                float mediumSupport = saturate(max(volumeShapeMask, cutBand));
+                float baseFog = _VolumeBaseFogDensity * mediumSupport;
+                float supportedHeightFog = heightFog * mediumSupport;
+                float supportedShapeBand = shapeBand * volumeShapeMask;
+                float cloudBodyDensity = volumeShapeMask * max(_VolumeCloudDensityBoost, 0.0);
+                float density = (baseFog + supportedHeightFog * localVolumeMask + supportedShapeBand * 0.16 + cloudBodyDensity + cutBand * _VolumeCutFogBoost) * noiseMask * boundaryFade;
+                density = density > max(_VolumeDensityThreshold, 0.0) ? density : 0.0;
                 densityDebug = saturate(density);
 
                 sigmaA = max(0.0, density * _VolumeAbsorptionDensity);
@@ -1465,6 +1577,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 volumeTerms.sigmaADebug = 0.0;
                 volumeTerms.sigmaSDebug = 0.0;
                 volumeTerms.sigmaTDebug = 0.0;
+                volumeTerms.shapeMaskDebug = 0.0;
 
                 bool wantsSurfaceVolume = hit && _VolumeSurfaceContribution > 0.5;
                 bool wantsBackgroundVolume = !hit && _VolumeBackgroundContribution > 0.5;
@@ -1514,7 +1627,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                         float scatteringLuminance = dot(volumeTerms.scattering, float3(0.2126, 0.7152, 0.0722));
                         volumeAlpha = saturate(max(volumeAlpha, scatteringLuminance * 2.0));
 
-                        if (_DebugView <= 0.5 && volumeAlpha <= 0.003)
+                        if (_DebugView <= 0.5 && volumeAlpha <= max(_VolumeAlphaClipThreshold, 0.0))
                         {
                             clip(-1.0);
                         }
@@ -1547,7 +1660,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     float scatteringLuminance = dot(volumeTerms.scattering, float3(0.2126, 0.7152, 0.0722));
                     volumeAlpha = saturate(max(volumeAlpha, scatteringLuminance * 2.0));
 
-                    if (_DebugView <= 0.5 && volumeAlpha <= 0.003)
+                    if (_DebugView <= 0.5 && volumeAlpha <= max(_VolumeAlphaClipThreshold, 0.0))
                     {
                         clip(-1.0);
                     }
@@ -1565,6 +1678,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 else
                 {
                     finalColor = ApplyVolumeDisplayMapping(finalColor);
+                    finalColor *= outputAlpha;
                 }
 
                 return half4(finalColor, outputAlpha);
