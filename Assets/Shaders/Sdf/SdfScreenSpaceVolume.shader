@@ -73,6 +73,15 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
             StructuredBuffer<SdfSceneShapeData> _SdfShadowSceneShapes;
             StructuredBuffer<CutPlaneData> _SdfShadowSceneCutPlanes;
             int _SdfShadowSceneShapeCount;
+            StructuredBuffer<uint2> _SdfCutTileRanges;
+            StructuredBuffer<int> _SdfCutTileIndices;
+            int _SdfCutTileEnabled;
+            int _SdfCutTileGridWidth;
+            int _SdfCutTileGridHeight;
+            int _SdfCutTileMaxIndicesPerTile;
+
+            #define SDF_CUT_TILE_SIZE 16
+            #define SDF_CUT_TILE_OVERFLOW_BIT 0x80000000u
 
             float _SdfScreenSpaceVolumeEnabled;
             float _SdfVolumeVisibilityMode;
@@ -188,9 +197,62 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 return min(sphereDistance, clippedBoxDistance);
             }
 
-            float ApplySceneCutPlanes(float3 p, float baseDistance, int cutStart, int cutCount)
+            int GetSdfCutTileIndex(float2 pixelPosition)
+            {
+                if (_SdfCutTileEnabled <= 0 || _SdfCutTileGridWidth <= 0 || _SdfCutTileGridHeight <= 0)
+                {
+                    return -1;
+                }
+
+                int2 tileCoord = int2(floor(pixelPosition / SDF_CUT_TILE_SIZE));
+                if (tileCoord.x < 0 || tileCoord.y < 0 || tileCoord.x >= _SdfCutTileGridWidth || tileCoord.y >= _SdfCutTileGridHeight)
+                {
+                    return -1;
+                }
+
+                return tileCoord.y * _SdfCutTileGridWidth + tileCoord.x;
+            }
+
+            bool TryGetSdfCutTileRange(int tileIndex, out uint offset, out uint count)
+            {
+                offset = 0u;
+                count = 0u;
+                if (tileIndex < 0 || _SdfCutTileEnabled <= 0)
+                {
+                    return false;
+                }
+
+                uint2 range = _SdfCutTileRanges[tileIndex];
+                offset = range.x;
+                count = range.y & 0x7fffffffu;
+                return (range.y & SDF_CUT_TILE_OVERFLOW_BIT) == 0u;
+            }
+
+            float ApplySceneCutPlanes(float3 p, float baseDistance, int cutStart, int cutCount, int tileIndex)
             {
                 float d = baseDistance;
+                uint tileOffset;
+                uint tileCount;
+                if (TryGetSdfCutTileRange(tileIndex, tileOffset, tileCount))
+                {
+                    int cutEnd = cutStart + cutCount;
+                    [loop]
+                    for (uint tileCutIndex = 0u; tileCutIndex < tileCount; tileCutIndex++)
+                    {
+                        int cutIndex = _SdfCutTileIndices[tileOffset + tileCutIndex];
+                        if (cutIndex < cutStart || cutIndex >= cutEnd)
+                        {
+                            continue;
+                        }
+
+                        CutPlaneData cutPlane = _SdfShadowSceneCutPlanes[cutIndex];
+                        float planeSdf = dot(p, cutPlane.normal) + cutPlane.distance;
+                        d = max(d, -(planeSdf * cutPlane.sideSign));
+                    }
+
+                    return d;
+                }
+
                 [loop]
                 for (int i = 0; i < cutCount; i++)
                 {
@@ -201,7 +263,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 return d;
             }
 
-            float EvaluateSceneCutBandForShape(float3 p, float baseDistance, int cutStart, int cutCount, float distanceScale)
+            float EvaluateSceneCutBandForShape(float3 p, float baseDistance, int cutStart, int cutCount, float distanceScale, int tileIndex)
             {
                 if (cutCount <= 0)
                 {
@@ -210,16 +272,48 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
 
                 float dominantHalfSpace = -1e20;
                 float dominantPlaneDistance = 1e20;
-                [loop]
-                for (int i = 0; i < cutCount; i++)
+                uint tileOffset;
+                uint tileCount;
+                if (TryGetSdfCutTileRange(tileIndex, tileOffset, tileCount))
                 {
-                    CutPlaneData cutPlane = _SdfShadowSceneCutPlanes[cutStart + i];
-                    float planeSdf = dot(p, cutPlane.normal) + cutPlane.distance;
-                    float halfSpaceSdf = -(planeSdf * cutPlane.sideSign);
-                    if (halfSpaceSdf > dominantHalfSpace)
+                    int cutEnd = cutStart + cutCount;
+                    [loop]
+                    for (uint tileCutIndex = 0u; tileCutIndex < tileCount; tileCutIndex++)
                     {
-                        dominantHalfSpace = halfSpaceSdf;
-                        dominantPlaneDistance = planeSdf;
+                        int cutIndex = _SdfCutTileIndices[tileOffset + tileCutIndex];
+                        if (cutIndex < cutStart || cutIndex >= cutEnd)
+                        {
+                            continue;
+                        }
+
+                        CutPlaneData cutPlane = _SdfShadowSceneCutPlanes[cutIndex];
+                        float planeSdf = dot(p, cutPlane.normal) + cutPlane.distance;
+                        float halfSpaceSdf = -(planeSdf * cutPlane.sideSign);
+                        if (halfSpaceSdf > dominantHalfSpace)
+                        {
+                            dominantHalfSpace = halfSpaceSdf;
+                            dominantPlaneDistance = planeSdf;
+                        }
+                    }
+
+                    if (dominantHalfSpace <= -1e19)
+                    {
+                        return 0.0;
+                    }
+                }
+                else
+                {
+                    [loop]
+                    for (int i = 0; i < cutCount; i++)
+                    {
+                        CutPlaneData cutPlane = _SdfShadowSceneCutPlanes[cutStart + i];
+                        float planeSdf = dot(p, cutPlane.normal) + cutPlane.distance;
+                        float halfSpaceSdf = -(planeSdf * cutPlane.sideSign);
+                        if (halfSpaceSdf > dominantHalfSpace)
+                        {
+                            dominantHalfSpace = halfSpaceSdf;
+                            dominantPlaneDistance = planeSdf;
+                        }
                     }
                 }
 
@@ -232,7 +326,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 return planeBand * originalInterior * lerp(0.65, 1.0, removedSide);
             }
 
-            float ShadowSceneMap(float3 volumeP)
+            float ShadowSceneMap(float3 volumeP, int tileIndex)
             {
                 if (_SdfShadowSceneShapeCount <= 0)
                 {
@@ -260,13 +354,13 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                     int cutStart = (int)round(shape.cutRangeAndDistanceScale.x);
                     int cutCount = (int)round(shape.cutRangeAndDistanceScale.y);
                     float distanceScale = max(shape.cutRangeAndDistanceScale.z, 1e-4);
-                    shapeDistance = ApplySceneCutPlanes(pShapeOS, shapeDistance, cutStart, cutCount) * distanceScale;
+                    shapeDistance = ApplySceneCutPlanes(pShapeOS, shapeDistance, cutStart, cutCount, tileIndex) * distanceScale;
                     d = min(d, shapeDistance);
                 }
                 return d;
             }
 
-            VolumeBands EvaluateVolumeMediumBands(float3 volumeP)
+            VolumeBands EvaluateVolumeMediumBands(float3 volumeP, int tileIndex)
             {
                 VolumeBands bands;
                 bands.finalDistance = 1e20;
@@ -297,9 +391,9 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                     int cutStart = (int)round(shape.cutRangeAndDistanceScale.x);
                     int cutCount = (int)round(shape.cutRangeAndDistanceScale.y);
                     float distanceScale = max(shape.cutRangeAndDistanceScale.z, 1e-4);
-                    float finalDistance = ApplySceneCutPlanes(pShapeOS, baseDistance, cutStart, cutCount) * distanceScale;
+                    float finalDistance = ApplySceneCutPlanes(pShapeOS, baseDistance, cutStart, cutCount, tileIndex) * distanceScale;
                     bands.finalDistance = min(bands.finalDistance, finalDistance);
-                    bands.cutBand = max(bands.cutBand, EvaluateSceneCutBandForShape(pShapeOS, baseDistance, cutStart, cutCount, distanceScale));
+                    bands.cutBand = max(bands.cutBand, EvaluateSceneCutBandForShape(pShapeOS, baseDistance, cutStart, cutCount, distanceScale, tileIndex));
                 }
 
                 return bands;
@@ -468,9 +562,9 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 return 1.0 - smoothstep(0.0, max(_VolumeFogShapeEdgeSoftness, _HitEpsilon), signedDistance);
             }
 
-            void GetParticipatingMedia(float3 samplePosition, out float sigmaA, out float sigmaS, out float sigmaT, out float3 emissionRadiance, out float shapeMaskDebug, out float densityDebug)
+            void GetParticipatingMedia(float3 samplePosition, out float sigmaA, out float sigmaS, out float sigmaT, out float3 emissionRadiance, out float shapeMaskDebug, out float densityDebug, int tileIndex)
             {
-                VolumeBands mediumBands = EvaluateVolumeMediumBands(samplePosition);
+                VolumeBands mediumBands = EvaluateVolumeMediumBands(samplePosition, tileIndex);
                 float boundaryFade = EvaluateProxyBoundaryFade(samplePosition);
                 float volumeShapeMask = EvaluateVolumeFogShapeMask(samplePosition);
                 shapeMaskDebug = saturate(volumeShapeMask);
@@ -545,7 +639,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 for (int stepIndex = 0; stepIndex < 64; stepIndex++)
                 {
                     if (stepIndex >= (int)max(_VolumeShadowSamples, 4.0) || t >= maxShadowDistance) break;
-                    float h = ShadowSceneMap(shadowOrigin + lightDir * t);
+                    float h = ShadowSceneMap(shadowOrigin + lightDir * t, -1);
                     if (h < _HitEpsilon) return 0.0;
                     t += clamp(h, minStep, maxStep);
                 }
@@ -560,7 +654,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 }
 
                 float radius = max(_VolumeSurfaceOcclusionRadius, _HitEpsilon);
-                float surfaceDistance = max(ShadowSceneMap(samplePosition), 0.0);
+                float surfaceDistance = max(ShadowSceneMap(samplePosition, -1), 0.0);
                 float proximity = 1.0 - smoothstep(0.0, radius, surfaceDistance);
                 return saturate(1.0 - proximity * saturate(_VolumeSurfaceOcclusionStrength));
             }
@@ -589,7 +683,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                     float3 p = shadowOrigin + lightDir * (t + currentStepLength * 0.5);
                     float sigmaA, sigmaS, sigmaT, shapeMaskDebug, densityDebug;
                     float3 emissionRadiance;
-                    GetParticipatingMedia(p, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug);
+                    GetParticipatingMedia(p, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug, -1);
 
                     if (!HasVolumeSampleContribution(sigmaT, emissionRadiance))
                     {
@@ -637,7 +731,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 return shadowSample;
             }
 
-            float TraceSceneSurfaceEnd(float3 rayOrigin, float3 rayDir, float segmentStart, float segmentEnd)
+            float TraceSceneSurfaceEnd(float3 rayOrigin, float3 rayDir, float segmentStart, float segmentEnd, int tileIndex)
             {
                 if (_SdfShadowSceneShapeCount <= 0)
                 {
@@ -653,7 +747,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                         break;
                     }
 
-                    float h = ShadowSceneMap(rayOrigin + rayDir * t);
+                    float h = ShadowSceneMap(rayOrigin + rayDir * t, tileIndex);
                     if (h < _HitEpsilon)
                     {
                         return t;
@@ -665,7 +759,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 return segmentEnd;
             }
 
-            VolumeTerms EvaluateVolumeLighting(float3 rayOrigin, float3 rayDir, float3 rayDirWS, float segmentStart, float segmentEnd, float3 mainLightDirWS, float3 mainLightColor)
+            VolumeTerms EvaluateVolumeLighting(float3 rayOrigin, float3 rayDir, float3 rayDirWS, float segmentStart, float segmentEnd, float3 mainLightDirWS, float3 mainLightColor, int tileIndex)
             {
                 VolumeTerms terms;
                 terms.scattering = 0.0;
@@ -717,7 +811,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                     float3 samplePosition = rayOrigin + rayDir * (sampleT + currentStepLength * 0.5);
                     float sigmaA, sigmaS, sigmaT, shapeMaskDebug, densityDebug;
                     float3 emissionRadiance;
-                    GetParticipatingMedia(samplePosition, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug);
+                    GetParticipatingMedia(samplePosition, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug, tileIndex);
                     if (!HasVolumeSampleContribution(sigmaT, emissionRadiance))
                     {
                         sampleT += min(currentStepLength * EvaluateEmptyVolumeStepScale(sigmaT, densityDebug, shapeMaskDebug), segmentEnd - sampleT);
@@ -835,6 +929,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
                 float2 uv = input.texcoord.xy;
+                int sdfCutTileIndex = GetSdfCutTileIndex(uv * _ScreenParams.xy);
                 float4 sourceColor = SAMPLE_TEXTURE2D_X_LOD(_BlitTexture, sampler_LinearClamp, uv, _BlitMipLevel);
                 bool wantsDebug = _DebugView > 0.5;
 
@@ -876,7 +971,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                     return wantsDebug ? float4(0.0, 0.0, 0.0, sourceColor.a) : sourceColor;
                 }
 
-                segmentEnd = TraceSceneSurfaceEnd(rayOrigin, rayDir, segmentStart, segmentEnd);
+                segmentEnd = TraceSceneSurfaceEnd(rayOrigin, rayDir, segmentStart, segmentEnd, sdfCutTileIndex);
                 if (segmentEnd <= segmentStart + _HitEpsilon)
                 {
                     return wantsDebug ? float4(0.0, 0.0, 0.0, sourceColor.a) : sourceColor;
@@ -891,7 +986,8 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                     segmentStart,
                     segmentEnd,
                     normalize(mainLight.direction),
-                    mainLight.color);
+                    mainLight.color,
+                    sdfCutTileIndex);
 
                 float3 debugColor = EvaluateDebugView(terms);
                 if (debugColor.x >= 0.0)

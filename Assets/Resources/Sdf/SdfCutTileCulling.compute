@@ -1,0 +1,129 @@
+#pragma kernel BuildCutTileLists
+
+struct SdfCutInfluenceData
+{
+    float4 boundsMinWS;
+    float4 boundsMaxWS;
+};
+
+StructuredBuffer<SdfCutInfluenceData> _SdfCutInfluences;
+RWStructuredBuffer<uint2> _SdfCutTileRanges;
+RWStructuredBuffer<int> _SdfCutTileIndices;
+
+int _SdfCutInfluenceCount;
+int _SdfCutTileGridWidth;
+int _SdfCutTileGridHeight;
+int _SdfCutTileMaxIndicesPerTile;
+int _SdfCutTilePaddingPixels;
+float4 _SdfCutTileScreenSize;
+float4x4 _SdfCutTileWorldToClip;
+
+#define SDF_CUT_TILE_SIZE 16
+#define SDF_CUT_TILE_OVERFLOW_BIT 0x80000000u
+
+bool ProjectInfluenceBounds(float3 boundsMin, float3 boundsMax, out float2 screenMin, out float2 screenMax)
+{
+    screenMin = _SdfCutTileScreenSize.xy;
+    screenMax = float2(0.0, 0.0);
+    bool clippedByNearPlane = false;
+    bool hasProjectedCorner = false;
+
+    [unroll]
+    for (int cornerIndex = 0; cornerIndex < 8; cornerIndex++)
+    {
+        float3 corner = float3(
+            (cornerIndex & 1) != 0 ? boundsMax.x : boundsMin.x,
+            (cornerIndex & 2) != 0 ? boundsMax.y : boundsMin.y,
+            (cornerIndex & 4) != 0 ? boundsMax.z : boundsMin.z);
+        float4 clip = mul(_SdfCutTileWorldToClip, float4(corner, 1.0));
+
+        if (clip.w <= 1e-5)
+        {
+            clippedByNearPlane = true;
+            continue;
+        }
+
+        float2 ndc = clip.xy / clip.w;
+        float2 screen = (ndc * 0.5 + 0.5) * _SdfCutTileScreenSize.xy;
+        screenMin = min(screenMin, screen);
+        screenMax = max(screenMax, screen);
+        hasProjectedCorner = true;
+    }
+
+    if (!hasProjectedCorner)
+    {
+        return false;
+    }
+
+    if (clippedByNearPlane)
+    {
+        screenMin = float2(0.0, 0.0);
+        screenMax = _SdfCutTileScreenSize.xy;
+        return true;
+    }
+
+    float padding = (float)max(_SdfCutTilePaddingPixels, 0);
+    float2 paddedMin = screenMin - padding;
+    float2 paddedMax = screenMax + padding;
+    if (paddedMax.x < 0.0 || paddedMax.y < 0.0 || paddedMin.x > _SdfCutTileScreenSize.x || paddedMin.y > _SdfCutTileScreenSize.y)
+    {
+        return false;
+    }
+
+    screenMin = clamp(paddedMin, float2(0.0, 0.0), _SdfCutTileScreenSize.xy);
+    screenMax = clamp(paddedMax, float2(0.0, 0.0), _SdfCutTileScreenSize.xy);
+    return true;
+}
+
+[numthreads(8, 8, 1)]
+void BuildCutTileLists(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    uint tileX = dispatchThreadId.x;
+    uint tileY = dispatchThreadId.y;
+    if (tileX >= (uint)_SdfCutTileGridWidth || tileY >= (uint)_SdfCutTileGridHeight)
+    {
+        return;
+    }
+
+    uint tileIndex = tileY * (uint)_SdfCutTileGridWidth + tileX;
+    uint writeOffset = tileIndex * (uint)_SdfCutTileMaxIndicesPerTile;
+    uint writeCount = 0;
+    bool overflow = false;
+
+    float2 tileMin = float2(tileX, tileY) * SDF_CUT_TILE_SIZE;
+    float2 tileMax = min(tileMin + SDF_CUT_TILE_SIZE, _SdfCutTileScreenSize.xy);
+
+    [loop]
+    for (int cutIndex = 0; cutIndex < _SdfCutInfluenceCount; cutIndex++)
+    {
+        SdfCutInfluenceData influence = _SdfCutInfluences[cutIndex];
+        float2 influenceMin;
+        float2 influenceMax;
+        if (!ProjectInfluenceBounds(influence.boundsMinWS.xyz, influence.boundsMaxWS.xyz, influenceMin, influenceMax))
+        {
+            continue;
+        }
+
+        bool overlapsTile =
+            influenceMax.x >= tileMin.x &&
+            influenceMin.x <= tileMax.x &&
+            influenceMax.y >= tileMin.y &&
+            influenceMin.y <= tileMax.y;
+        if (!overlapsTile)
+        {
+            continue;
+        }
+
+        if (writeCount < (uint)_SdfCutTileMaxIndicesPerTile)
+        {
+            _SdfCutTileIndices[writeOffset + writeCount] = cutIndex;
+            writeCount++;
+        }
+        else
+        {
+            overflow = true;
+        }
+    }
+
+    _SdfCutTileRanges[tileIndex] = uint2(writeOffset, writeCount | (overflow ? SDF_CUT_TILE_OVERFLOW_BIT : 0u));
+}

@@ -332,6 +332,15 @@ Shader "Custom/Sdf/Phase1Raymarch"
             StructuredBuffer<SdfSceneShapeData> _SdfShadowSceneShapes;
             StructuredBuffer<CutPlaneData> _SdfShadowSceneCutPlanes;
             int _SdfShadowSceneShapeCount;
+            StructuredBuffer<uint2> _SdfCutTileRanges;
+            StructuredBuffer<int> _SdfCutTileIndices;
+            int _SdfCutTileEnabled;
+            int _SdfCutTileGridWidth;
+            int _SdfCutTileGridHeight;
+            int _SdfCutTileMaxIndicesPerTile;
+
+            #define SDF_CUT_TILE_SIZE 16
+            #define SDF_CUT_TILE_OVERFLOW_BIT 0x80000000u
 
             Varyings vert(Attributes input)
             {
@@ -426,9 +435,62 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return min(sphereDistance, clippedBoxDistance);
             }
 
-            float ApplySceneCutPlanes(float3 p, float baseDistance, int cutStart, int cutCount)
+            int GetSdfCutTileIndex(float2 pixelPosition)
+            {
+                if (_SdfCutTileEnabled <= 0 || _SdfCutTileGridWidth <= 0 || _SdfCutTileGridHeight <= 0)
+                {
+                    return -1;
+                }
+
+                int2 tileCoord = int2(floor(pixelPosition / SDF_CUT_TILE_SIZE));
+                if (tileCoord.x < 0 || tileCoord.y < 0 || tileCoord.x >= _SdfCutTileGridWidth || tileCoord.y >= _SdfCutTileGridHeight)
+                {
+                    return -1;
+                }
+
+                return tileCoord.y * _SdfCutTileGridWidth + tileCoord.x;
+            }
+
+            bool TryGetSdfCutTileRange(int tileIndex, out uint offset, out uint count)
+            {
+                offset = 0u;
+                count = 0u;
+                if (tileIndex < 0 || _SdfCutTileEnabled <= 0)
+                {
+                    return false;
+                }
+
+                uint2 range = _SdfCutTileRanges[tileIndex];
+                offset = range.x;
+                count = range.y & 0x7fffffffu;
+                return (range.y & SDF_CUT_TILE_OVERFLOW_BIT) == 0u;
+            }
+
+            float ApplySceneCutPlanes(float3 p, float baseDistance, int cutStart, int cutCount, int tileIndex)
             {
                 float d = baseDistance;
+                uint tileOffset;
+                uint tileCount;
+                if (TryGetSdfCutTileRange(tileIndex, tileOffset, tileCount))
+                {
+                    int cutEnd = cutStart + cutCount;
+                    [loop]
+                    for (uint tileCutIndex = 0u; tileCutIndex < tileCount; tileCutIndex++)
+                    {
+                        int cutIndex = _SdfCutTileIndices[tileOffset + tileCutIndex];
+                        if (cutIndex < cutStart || cutIndex >= cutEnd)
+                        {
+                            continue;
+                        }
+
+                        CutPlaneData cutPlane = _SdfSceneCutPlanes[cutIndex];
+                        float planeSdf = dot(p, cutPlane.normal) + cutPlane.distance;
+                        float halfSpaceSdf = -(planeSdf * cutPlane.sideSign);
+                        d = max(d, halfSpaceSdf);
+                    }
+
+                    return d;
+                }
 
                 [loop]
                 for (int i = 0; i < cutCount; i++)
@@ -442,7 +504,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return d;
             }
 
-            float EvaluateSceneCutBandForShape(float3 p, float baseDistance, int cutStart, int cutCount, float distanceScale)
+            float EvaluateSceneCutBandForShape(float3 p, float baseDistance, int cutStart, int cutCount, float distanceScale, int tileIndex)
             {
                 if (cutCount <= 0)
                 {
@@ -451,18 +513,51 @@ Shader "Custom/Sdf/Phase1Raymarch"
 
                 float dominantHalfSpace = -1e20;
                 float dominantPlaneDistance = 1e20;
-
-                [loop]
-                for (int i = 0; i < cutCount; i++)
+                uint tileOffset;
+                uint tileCount;
+                if (TryGetSdfCutTileRange(tileIndex, tileOffset, tileCount))
                 {
-                    CutPlaneData cutPlane = _SdfSceneCutPlanes[cutStart + i];
-                    float planeSdf = dot(p, cutPlane.normal) + cutPlane.distance;
-                    float halfSpaceSdf = -(planeSdf * cutPlane.sideSign);
-
-                    if (halfSpaceSdf > dominantHalfSpace)
+                    int cutEnd = cutStart + cutCount;
+                    [loop]
+                    for (uint tileCutIndex = 0u; tileCutIndex < tileCount; tileCutIndex++)
                     {
-                        dominantHalfSpace = halfSpaceSdf;
-                        dominantPlaneDistance = planeSdf;
+                        int cutIndex = _SdfCutTileIndices[tileOffset + tileCutIndex];
+                        if (cutIndex < cutStart || cutIndex >= cutEnd)
+                        {
+                            continue;
+                        }
+
+                        CutPlaneData cutPlane = _SdfSceneCutPlanes[cutIndex];
+                        float planeSdf = dot(p, cutPlane.normal) + cutPlane.distance;
+                        float halfSpaceSdf = -(planeSdf * cutPlane.sideSign);
+
+                        if (halfSpaceSdf > dominantHalfSpace)
+                        {
+                            dominantHalfSpace = halfSpaceSdf;
+                            dominantPlaneDistance = planeSdf;
+                        }
+                    }
+
+                    if (dominantHalfSpace <= -1e19)
+                    {
+                        return 0.0;
+                    }
+                }
+                else
+                {
+
+                    [loop]
+                    for (int i = 0; i < cutCount; i++)
+                    {
+                        CutPlaneData cutPlane = _SdfSceneCutPlanes[cutStart + i];
+                        float planeSdf = dot(p, cutPlane.normal) + cutPlane.distance;
+                        float halfSpaceSdf = -(planeSdf * cutPlane.sideSign);
+
+                        if (halfSpaceSdf > dominantHalfSpace)
+                        {
+                            dominantHalfSpace = halfSpaceSdf;
+                            dominantPlaneDistance = planeSdf;
+                        }
                     }
                 }
 
@@ -475,7 +570,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return planeBand * originalInterior * lerp(0.65, 1.0, removedSide);
             }
 
-            float SceneMap(float3 p)
+            float SceneMap(float3 p, int tileIndex)
             {
                 if (_SdfSceneShapeCount <= 0)
                 {
@@ -505,7 +600,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     int cutStart = (int)round(shape.cutRangeAndDistanceScale.x);
                     int cutCount = (int)round(shape.cutRangeAndDistanceScale.y);
                     float distanceScale = max(shape.cutRangeAndDistanceScale.z, 1e-4);
-                    shapeDistance = ApplySceneCutPlanes(pShapeOS, shapeDistance, cutStart, cutCount) * distanceScale;
+                    shapeDistance = ApplySceneCutPlanes(pShapeOS, shapeDistance, cutStart, cutCount, tileIndex) * distanceScale;
                     d = min(d, shapeDistance);
                 }
 
@@ -565,11 +660,11 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return d;
             }
 
-            float Map(float3 p)
+            float Map(float3 p, int tileIndex)
             {
                 if (_UseSceneSdf > 0.5)
                 {
-                    return SceneMap(p);
+                    return SceneMap(p, tileIndex);
                 }
 
                 return ApplyCutPlanes(p, BaseShapeMap(p));
@@ -667,7 +762,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return clamp(requested, lowerBound, upperBound);
             }
 
-            float3 EstimateNormalOS(float3 p)
+            float3 EstimateNormalOS(float3 p, int tileIndex)
             {
                 float e = GetNormalSampleEpsilon();
                 float3 x = float3(e, 0.0, 0.0);
@@ -675,9 +770,9 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float3 z = float3(0.0, 0.0, e);
 
                 float3 gradient = float3(
-                    Map(p + x) - Map(p - x),
-                    Map(p + y) - Map(p - y),
-                    Map(p + z) - Map(p - z)
+                    Map(p + x, tileIndex) - Map(p - x, tileIndex),
+                    Map(p + y, tileIndex) - Map(p - y, tileIndex),
+                    Map(p + z, tileIndex) - Map(p - z, tileIndex)
                 );
 
                 return normalize(gradient);
@@ -711,7 +806,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     float expectedDistance = sampleDistance - bias;
                     float sampledDistance = _SdfShadowSceneShapeCount > 0
                         ? ShadowSceneMap(samplePosition)
-                        : Map(samplePosition);
+                        : Map(samplePosition, -1);
                     float sampleOcclusion = saturate((expectedDistance - sampledDistance) / max(radius, 1e-4));
                     float weight = 1.0 - sample01 * 0.65;
                     occlusion += sampleOcclusion * weight;
@@ -745,7 +840,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return max(length(p1WS - p0WS), 1e-4);
             }
 
-            float RefineSurfaceHitT(float3 rayOriginOS, float3 rayDirOS, float coarseT, float maxDistance)
+            float RefineSurfaceHitT(float3 rayOriginOS, float3 rayDirOS, float coarseT, float maxDistance, int tileIndex)
             {
                 float refinedT = coarseT;
                 float refineEpsilon = max(_HitEpsilon * 0.125, 1e-5);
@@ -756,7 +851,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 for (int refineStep = 0; refineStep < 6; refineStep++)
                 {
                     float3 p = rayOriginOS + rayDirOS * refinedT;
-                    float h = Map(p);
+                    float h = Map(p, tileIndex);
                     if (h <= refineEpsilon)
                     {
                         break;
@@ -801,7 +896,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
 
                     float h = useShadowScene > 0.5
                         ? ShadowSceneMap(rayOriginOS + rayDirOS * t)
-                        : Map(rayOriginOS + rayDirOS * t);
+                        : Map(rayOriginOS + rayDirOS * t, -1);
                     bool ignoreSelfContact = t < selfIgnoreDistance;
                     h = ignoreSelfContact ? max(h, minStep) : h;
                     if (h < _HitEpsilon && !ignoreSelfContact)
@@ -1032,7 +1127,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 return 1.0 - smoothstep(0.0, max(_VolumeFogShapeEdgeSoftness, _HitEpsilon), signedDistance);
             }
 
-            SdfVolumeMediumBands EvaluateVolumeMediumBands(float3 samplePositionOS)
+            SdfVolumeMediumBands EvaluateVolumeMediumBands(float3 samplePositionOS, int tileIndex)
             {
                 SdfVolumeMediumBands bands;
                 bands.finalDistance = 1e20;
@@ -1062,9 +1157,9 @@ Shader "Custom/Sdf/Phase1Raymarch"
                         int cutStart = (int)round(shape.cutRangeAndDistanceScale.x);
                         int cutCount = (int)round(shape.cutRangeAndDistanceScale.y);
                         float distanceScale = max(shape.cutRangeAndDistanceScale.z, 1e-4);
-                        float finalDistance = ApplySceneCutPlanes(pShapeOS, baseDistance, cutStart, cutCount) * distanceScale;
+                        float finalDistance = ApplySceneCutPlanes(pShapeOS, baseDistance, cutStart, cutCount, tileIndex) * distanceScale;
                         bands.finalDistance = min(bands.finalDistance, finalDistance);
-                        bands.cutBand = max(bands.cutBand, EvaluateSceneCutBandForShape(pShapeOS, baseDistance, cutStart, cutCount, distanceScale));
+                        bands.cutBand = max(bands.cutBand, EvaluateSceneCutBandForShape(pShapeOS, baseDistance, cutStart, cutCount, distanceScale, tileIndex));
                     }
 
                     return bands;
@@ -1093,9 +1188,10 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 out float sigmaT,
                 out float3 emissionRadiance,
                 out float shapeMaskDebug,
-                out float densityDebug)
+                out float densityDebug,
+                int tileIndex)
             {
-                SdfVolumeMediumBands mediumBands = EvaluateVolumeMediumBands(samplePositionOS);
+                SdfVolumeMediumBands mediumBands = EvaluateVolumeMediumBands(samplePositionOS, tileIndex);
                 float finalDistance = mediumBands.finalDistance;
                 float boundaryFade = EvaluateProxyBoundaryFade(samplePositionOS);
                 float volumeShapeMask = EvaluateVolumeFogShapeMask(samplePositionOS);
@@ -1167,7 +1263,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                         break;
                     }
 
-                    float geometryDistance = Map(shadowOriginOS + lightDirOS * t);
+                    float geometryDistance = Map(shadowOriginOS + lightDirOS * t, -1);
                     if (geometryDistance < _HitEpsilon)
                     {
                         return 0.0;
@@ -1212,7 +1308,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     float3 emissionRadiance;
                     float shapeMaskDebug;
                     float densityDebug;
-                    GetParticipatingMedia(p, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug);
+                    GetParticipatingMedia(p, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug, -1);
 
                     if (!HasVolumeSampleContribution(sigmaT, emissionRadiance))
                     {
@@ -1353,7 +1449,8 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float segmentStart,
                 float segmentEnd,
                 float3 mainLightDirWS,
-                float3 mainLightColor)
+                float3 mainLightColor,
+                int tileIndex)
             {
                 SdfVolumeTerms volumeTerms;
                 volumeTerms.scattering = 0.0;
@@ -1421,7 +1518,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     float3 emissionRadiance;
                     float shapeMaskDebug;
                     float densityDebug;
-                    GetParticipatingMedia(samplePositionOS, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug);
+                    GetParticipatingMedia(samplePositionOS, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug, tileIndex);
 
                     if (!HasVolumeSampleContribution(sigmaT, emissionRadiance))
                     {
@@ -1636,6 +1733,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
 
                 float3 rayOriginOS = TransformWorldToObject(rayOriginWS);
                 float3 rayDirOS = normalize(TransformWorldToObjectDir(rayDirWS));
+                int sdfCutTileIndex = GetSdfCutTileIndex(input.positionCS.xy);
 
                 float tEnter;
                 float tExit;
@@ -1660,7 +1758,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     }
 
                     float3 samplePointOS = rayOriginOS + rayDirOS * t;
-                    float distanceToSurface = Map(samplePointOS);
+                    float distanceToSurface = Map(samplePointOS, sdfCutTileIndex);
 
                     if (distanceToSurface < _HitEpsilon)
                     {
@@ -1704,7 +1802,8 @@ Shader "Custom/Sdf/Phase1Raymarch"
                         volumeStart,
                         volumeEnd,
                         normalize(volumeLight.direction),
-                        volumeLight.color);
+                        volumeLight.color,
+                        sdfCutTileIndex);
                 }
 
                 SdfSurfaceData surfaceData;
@@ -1730,7 +1829,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
 
                 if (hit)
                 {
-                    t = RefineSurfaceHitT(rayOriginOS, rayDirOS, t, maxDistance);
+                    t = RefineSurfaceHitT(rayOriginOS, rayDirOS, t, maxDistance, sdfCutTileIndex);
                     hitPositionOS = rayOriginOS + rayDirOS * t;
                 }
 
@@ -1754,7 +1853,7 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     else
                     {
                         surfaceData = EvaluateSurfaceData(hitPositionOS);
-                        float3 estimatedNormalOS = EstimateNormalOS(hitPositionOS);
+                        float3 estimatedNormalOS = EstimateNormalOS(hitPositionOS, sdfCutTileIndex);
                         float3 normalOS = ResolveSurfaceNormalOS(estimatedNormalOS, surfaceData);
                         surfaceData.ambientOcclusion = SampleSdfAmbientOcclusion(hitPositionOS, normalOS);
                         float3 hitPositionWS = TransformObjectToWorld(hitPositionOS);

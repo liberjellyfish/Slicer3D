@@ -19,11 +19,14 @@ public sealed class SdfSceneDataBuffer : IDisposable
 
     private readonly List<SdfSceneShapeGpu> shapeData = new List<SdfSceneShapeGpu>();
     private readonly List<CutPlaneData> cutPlaneData = new List<CutPlaneData>();
+    private readonly List<SdfCutInfluenceGpu> cutInfluenceData = new List<SdfCutInfluenceGpu>();
 
     private ComputeBuffer sceneShapeBuffer;
     private ComputeBuffer sceneCutPlaneBuffer;
+    private ComputeBuffer cutInfluenceBuffer;
     private SdfSceneShapeGpu[] shapeUploadCache = Array.Empty<SdfSceneShapeGpu>();
     private CutPlaneData[] cutPlaneUploadCache = Array.Empty<CutPlaneData>();
+    private SdfCutInfluenceGpu[] cutInfluenceUploadCache = Array.Empty<SdfCutInfluenceGpu>();
     private int lastSceneSourceHash = int.MinValue;
     private int lastUploadedDataHash = int.MinValue;
     private int dataVersion;
@@ -39,6 +42,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
     public int DataVersion => dataVersion;
     public ComputeBuffer ShapeBuffer => sceneShapeBuffer;
     public ComputeBuffer CutPlaneBuffer => sceneCutPlaneBuffer;
+    public ComputeBuffer CutInfluenceBuffer => cutInfluenceBuffer;
     public bool LastSyncRebuiltData { get; private set; }
     public bool LastSyncUploadedBuffers { get; private set; }
     public bool LastSyncBoundShadowGlobals { get; private set; }
@@ -47,16 +51,18 @@ public sealed class SdfSceneDataBuffer : IDisposable
     public bool TryGetBuffers(
         out ComputeBuffer shapeBuffer,
         out ComputeBuffer cutPlaneBuffer,
+        out ComputeBuffer cutInfluenceBuffer,
         out int shapeCount,
         out int cutPlaneCount,
         out int version)
     {
         shapeBuffer = sceneShapeBuffer;
         cutPlaneBuffer = sceneCutPlaneBuffer;
+        cutInfluenceBuffer = this.cutInfluenceBuffer;
         shapeCount = ShapeCount;
         cutPlaneCount = CutPlaneCount;
         version = dataVersion;
-        return shapeBuffer != null && cutPlaneBuffer != null && shapeCount > 0;
+        return shapeBuffer != null && cutPlaneBuffer != null && cutInfluenceBuffer != null && shapeCount > 0;
     }
 
     public bool Upload(Renderer targetRenderer, Transform sceneTransform, IReadOnlyList<SdfPhase1Driver> sources, MaterialPropertyBlock propertyBlock)
@@ -107,6 +113,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
         Shader.SetGlobalInt(SdfShadowSceneShapeCountId, 0);
         ReleaseBuffer(ref sceneShapeBuffer);
         ReleaseBuffer(ref sceneCutPlaneBuffer);
+        ReleaseBuffer(ref cutInfluenceBuffer);
         ShapeCount = 0;
         CutPlaneCount = 0;
         dataVersion = 0;
@@ -126,6 +133,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
         {
             shapeData.Clear();
             cutPlaneData.Clear();
+            cutInfluenceData.Clear();
 
             float volumeScale = EstimateUniformScale(sceneTransform.lossyScale);
             if (sources != null)
@@ -141,6 +149,15 @@ public sealed class SdfSceneDataBuffer : IDisposable
                     CutPlaneData[] cuts = GetCutPlanes(driver);
                     int cutStart = cutPlaneData.Count;
                     cutPlaneData.AddRange(cuts);
+                    Bounds influenceBounds = driver.GetWorldBounds();
+                    for (int cutIndex = 0; cutIndex < cuts.Length; cutIndex++)
+                    {
+                        cutInfluenceData.Add(new SdfCutInfluenceGpu
+                        {
+                            boundsMinWS = new Vector4(influenceBounds.min.x, influenceBounds.min.y, influenceBounds.min.z, 0.0f),
+                            boundsMaxWS = new Vector4(influenceBounds.max.x, influenceBounds.max.y, influenceBounds.max.z, 0.0f)
+                        });
+                    }
 
                     float driverScale = EstimateUniformScale(driver.transform.lossyScale);
                     float distanceScale = driverScale / Mathf.Max(volumeScale, 1e-4f);
@@ -186,7 +203,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
             LastSyncBoundRendererProperties = false;
 
             int sceneSourceHash = CalculateSceneSourceHash(sceneTransform, sources);
-            if (sceneSourceHash == lastSceneSourceHash && sceneShapeBuffer != null && sceneCutPlaneBuffer != null)
+            if (sceneSourceHash == lastSceneSourceHash && sceneShapeBuffer != null && sceneCutPlaneBuffer != null && cutInfluenceBuffer != null)
             {
                 return false;
             }
@@ -195,8 +212,9 @@ public sealed class SdfSceneDataBuffer : IDisposable
             LastSyncRebuiltData = true;
             bool shapeBufferChanged = EnsureBuffer(ref sceneShapeBuffer, Mathf.Max(shapeData.Count, 1), SdfSceneShapeGpu.Stride);
             bool cutPlaneBufferChanged = EnsureBuffer(ref sceneCutPlaneBuffer, Mathf.Max(cutPlaneData.Count, 1), CutPlaneData.Stride);
+            bool cutInfluenceBufferChanged = EnsureBuffer(ref cutInfluenceBuffer, Mathf.Max(cutInfluenceData.Count, 1), SdfCutInfluenceGpu.Stride);
             int dataHash = CalculateUploadHash();
-            bool dataChanged = shapeBufferChanged || cutPlaneBufferChanged || dataHash != lastUploadedDataHash;
+            bool dataChanged = shapeBufferChanged || cutPlaneBufferChanged || cutInfluenceBufferChanged || dataHash != lastUploadedDataHash;
             if (dataChanged)
             {
                 if (shapeData.Count > 0)
@@ -211,6 +229,13 @@ public sealed class SdfSceneDataBuffer : IDisposable
                     EnsureArrayCapacity(ref cutPlaneUploadCache, cutPlaneData.Count);
                     cutPlaneData.CopyTo(cutPlaneUploadCache);
                     sceneCutPlaneBuffer.SetData(cutPlaneUploadCache, 0, 0, cutPlaneData.Count);
+                }
+
+                if (cutInfluenceData.Count > 0)
+                {
+                    EnsureArrayCapacity(ref cutInfluenceUploadCache, cutInfluenceData.Count);
+                    cutInfluenceData.CopyTo(cutInfluenceUploadCache);
+                    cutInfluenceBuffer.SetData(cutInfluenceUploadCache, 0, 0, cutInfluenceData.Count);
                 }
 
                 lastUploadedDataHash = dataHash;
@@ -349,6 +374,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
             int hash = 17;
             hash = hash * 31 + shapeData.Count;
             hash = hash * 31 + cutPlaneData.Count;
+            hash = hash * 31 + cutInfluenceData.Count;
 
             for (int i = 0; i < shapeData.Count; i++)
             {
@@ -368,6 +394,13 @@ public sealed class SdfSceneDataBuffer : IDisposable
                 AppendHash(ref hash, cutPlane.normal);
                 hash = hash * 31 + cutPlane.distance.GetHashCode();
                 hash = hash * 31 + cutPlane.sideSign.GetHashCode();
+            }
+
+            for (int i = 0; i < cutInfluenceData.Count; i++)
+            {
+                SdfCutInfluenceGpu influence = cutInfluenceData[i];
+                AppendHash(ref hash, influence.boundsMinWS);
+                AppendHash(ref hash, influence.boundsMaxWS);
             }
 
             return hash;
@@ -423,5 +456,14 @@ public sealed class SdfSceneDataBuffer : IDisposable
         public Vector4 cutRangeAndDistanceScale;
 
         public static int Stride => Marshal.SizeOf<SdfSceneShapeGpu>();
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SdfCutInfluenceGpu
+    {
+        public Vector4 boundsMinWS;
+        public Vector4 boundsMaxWS;
+
+        public static int Stride => Marshal.SizeOf<SdfCutInfluenceGpu>();
     }
 }

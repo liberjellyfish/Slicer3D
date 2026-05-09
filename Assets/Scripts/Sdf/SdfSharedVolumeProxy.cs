@@ -13,6 +13,8 @@ public class SdfSharedVolumeProxy : MonoBehaviour
 {
     private static readonly ProfilerMarker LateUpdateMarker = new ProfilerMarker("SDF.SharedVolumeProxy.LateUpdate");
     private static readonly ProfilerMarker UploadSceneDataMarker = new ProfilerMarker("SDF.SharedVolumeProxy.UploadSceneData");
+    private static readonly ProfilerMarker CutTileCullingMarker = new ProfilerMarker("SDF.CutTileCulling.Dispatch");
+    private const int CutTileSize = 16;
 
     public enum ScreenSpaceVisibilityMode
     {
@@ -41,12 +43,23 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     [SerializeField] private bool drawBoundsGizmo = true;
     [SerializeField] private Color boundsGizmoColor = new Color(1.0f, 0.62f, 0.25f, 0.35f);
 
+    [Header("Cut Tile Culling")]
+    [SerializeField] private bool enableCutTileCulling = true;
+    [SerializeField] private ComputeShader cutTileCullingCompute;
+    [SerializeField] [Range(8, 256)] private int maxCutIndicesPerTile = 64;
+    [SerializeField] [Min(0)] private int cutTilePaddingPixels = 2;
+
     [Header("Runtime Stats")]
     [SerializeField] private int currentSdfShapeCount;
     [SerializeField] private int currentCutPlaneCount;
     [SerializeField] private int currentVolumeSamples;
     [SerializeField] private int currentShadowSamples;
     [SerializeField] private bool currentScreenSpaceVolumeEnabled;
+    [SerializeField] private bool currentCutTileCullingEnabled;
+    [SerializeField] private int currentCutTileGridWidth;
+    [SerializeField] private int currentCutTileGridHeight;
+    [SerializeField] private int currentCutTileIndexCapacity;
+    [SerializeField] private int cutTileDispatchVersion;
     [SerializeField] private int sceneDataVersion;
     [SerializeField] private bool lastSyncRebuiltSceneData;
     [SerializeField] private bool lastSyncUploadedBuffers;
@@ -61,6 +74,26 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     private int lastRendererConfigHash = int.MinValue;
     private int lastOwnershipHash = int.MinValue;
     private int lastBoundsHash = int.MinValue;
+    private int cutTileKernel = -1;
+    private int allocatedCutTileCount;
+    private int allocatedCutTileIndexCount;
+    private int lastCutTileDispatchHash = int.MinValue;
+    private ComputeBuffer cutTileRangeBuffer;
+    private ComputeBuffer cutTileIndexBuffer;
+    private ComputeBuffer dummyCutTileRangeBuffer;
+    private ComputeBuffer dummyCutTileIndexBuffer;
+
+    private static readonly int SdfCutInfluencesId = Shader.PropertyToID("_SdfCutInfluences");
+    private static readonly int SdfCutInfluenceCountId = Shader.PropertyToID("_SdfCutInfluenceCount");
+    private static readonly int SdfCutTileRangesId = Shader.PropertyToID("_SdfCutTileRanges");
+    private static readonly int SdfCutTileIndicesId = Shader.PropertyToID("_SdfCutTileIndices");
+    private static readonly int SdfCutTileEnabledId = Shader.PropertyToID("_SdfCutTileEnabled");
+    private static readonly int SdfCutTileGridWidthId = Shader.PropertyToID("_SdfCutTileGridWidth");
+    private static readonly int SdfCutTileGridHeightId = Shader.PropertyToID("_SdfCutTileGridHeight");
+    private static readonly int SdfCutTileMaxIndicesPerTileId = Shader.PropertyToID("_SdfCutTileMaxIndicesPerTile");
+    private static readonly int SdfCutTilePaddingPixelsId = Shader.PropertyToID("_SdfCutTilePaddingPixels");
+    private static readonly int SdfCutTileScreenSizeId = Shader.PropertyToID("_SdfCutTileScreenSize");
+    private static readonly int SdfCutTileWorldToClipId = Shader.PropertyToID("_SdfCutTileWorldToClip");
 
     public SdfPhase1Driver VolumeDriver => volumeDriver;
     public bool UseScreenSpaceVolume => useScreenSpaceVolume;
@@ -69,15 +102,17 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     public int CurrentVolumeSamples => currentVolumeSamples;
     public int CurrentShadowSamples => currentShadowSamples;
     public bool CurrentScreenSpaceVolumeEnabled => currentScreenSpaceVolumeEnabled;
+    public bool CurrentCutTileCullingEnabled => currentCutTileCullingEnabled;
     public int SceneDataVersion => sceneDataVersion;
     public bool TryGetSceneBuffers(
         out ComputeBuffer shapeBuffer,
         out ComputeBuffer cutPlaneBuffer,
+        out ComputeBuffer cutInfluenceBuffer,
         out int shapeCount,
         out int cutPlaneCount,
         out int version)
     {
-        return sceneDataBuffer.TryGetBuffers(out shapeBuffer, out cutPlaneBuffer, out shapeCount, out cutPlaneCount, out version);
+        return sceneDataBuffer.TryGetBuffers(out shapeBuffer, out cutPlaneBuffer, out cutInfluenceBuffer, out shapeCount, out cutPlaneCount, out version);
     }
     public bool AutoFitBounds
     {
@@ -100,6 +135,8 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     private void OnEnable()
     {
         CacheComponents();
+        RenderPipelineManager.beginCameraRendering -= HandleBeginCameraRendering;
+        RenderPipelineManager.beginCameraRendering += HandleBeginCameraRendering;
         ConfigureVolumeDriver();
         RefreshSurfaceDriversIfNeeded(true);
         ApplySurfaceDriverOwnership(true);
@@ -136,13 +173,19 @@ public class SdfSharedVolumeProxy : MonoBehaviour
 
     private void OnDisable()
     {
+        RenderPipelineManager.beginCameraRendering -= HandleBeginCameraRendering;
+        DisableCutTileCullingGlobals();
         SdfPhase1Driver.DisableScreenSpaceVolumeGlobals();
+        ReleaseCutTileBuffers();
         ReleaseSceneData();
     }
 
     private void OnDestroy()
     {
+        RenderPipelineManager.beginCameraRendering -= HandleBeginCameraRendering;
+        DisableCutTileCullingGlobals();
         SdfPhase1Driver.DisableScreenSpaceVolumeGlobals();
+        ReleaseCutTileBuffers();
         ReleaseSceneData();
     }
 
@@ -336,6 +379,223 @@ public class SdfSharedVolumeProxy : MonoBehaviour
         sceneDataBuffer.Dispose();
     }
 
+    private void HandleBeginCameraRendering(ScriptableRenderContext context, Camera camera)
+    {
+        if (!isActiveAndEnabled || camera == null)
+        {
+            return;
+        }
+
+        DispatchCutTileCulling(camera);
+    }
+
+    private void DispatchCutTileCulling(Camera camera)
+    {
+        using (CutTileCullingMarker.Auto())
+        {
+            if (!enableCutTileCulling || !ResolveCutTileCompute())
+            {
+                DisableCutTileCullingGlobals();
+                return;
+            }
+
+            if (!sceneDataBuffer.TryGetBuffers(
+                    out _,
+                    out _,
+                    out ComputeBuffer cutInfluenceBuffer,
+                    out _,
+                    out int cutPlaneCount,
+                    out int sceneVersion) ||
+                cutPlaneCount <= 0)
+            {
+                DisableCutTileCullingGlobals();
+                return;
+            }
+
+            int screenWidth = Mathf.Max(camera.pixelWidth, 1);
+            int screenHeight = Mathf.Max(camera.pixelHeight, 1);
+            int gridWidth = Mathf.CeilToInt(screenWidth / (float)CutTileSize);
+            int gridHeight = Mathf.CeilToInt(screenHeight / (float)CutTileSize);
+            int tileCount = Mathf.Max(gridWidth * gridHeight, 1);
+            int safeMaxIndicesPerTile = Mathf.Max(maxCutIndicesPerTile, 1);
+            int indexCapacity = tileCount * safeMaxIndicesPerTile;
+            Matrix4x4 worldToClip = GL.GetGPUProjectionMatrix(camera.projectionMatrix, false) * camera.worldToCameraMatrix;
+            int dispatchHash = CalculateCutTileDispatchHash(
+                camera,
+                screenWidth,
+                screenHeight,
+                gridWidth,
+                gridHeight,
+                safeMaxIndicesPerTile,
+                sceneVersion,
+                worldToClip);
+
+            EnsureCutTileBuffers(tileCount, indexCapacity);
+            BindCutTileGlobals(true, gridWidth, gridHeight, safeMaxIndicesPerTile, screenWidth, screenHeight);
+            if (dispatchHash == lastCutTileDispatchHash)
+            {
+                currentCutTileCullingEnabled = true;
+                return;
+            }
+
+            cutTileCullingCompute.SetInt(SdfCutInfluenceCountId, cutPlaneCount);
+            cutTileCullingCompute.SetInt(SdfCutTileGridWidthId, gridWidth);
+            cutTileCullingCompute.SetInt(SdfCutTileGridHeightId, gridHeight);
+            cutTileCullingCompute.SetInt(SdfCutTileMaxIndicesPerTileId, safeMaxIndicesPerTile);
+            cutTileCullingCompute.SetInt(SdfCutTilePaddingPixelsId, Mathf.Max(cutTilePaddingPixels, 0));
+            cutTileCullingCompute.SetVector(SdfCutTileScreenSizeId, new Vector4(screenWidth, screenHeight, 1.0f / screenWidth, 1.0f / screenHeight));
+            cutTileCullingCompute.SetMatrix(SdfCutTileWorldToClipId, worldToClip);
+            cutTileCullingCompute.SetBuffer(cutTileKernel, SdfCutInfluencesId, cutInfluenceBuffer);
+            cutTileCullingCompute.SetBuffer(cutTileKernel, SdfCutTileRangesId, cutTileRangeBuffer);
+            cutTileCullingCompute.SetBuffer(cutTileKernel, SdfCutTileIndicesId, cutTileIndexBuffer);
+
+            int groupX = Mathf.CeilToInt(gridWidth / 8.0f);
+            int groupY = Mathf.CeilToInt(gridHeight / 8.0f);
+            cutTileCullingCompute.Dispatch(cutTileKernel, groupX, groupY, 1);
+
+            lastCutTileDispatchHash = dispatchHash;
+            currentCutTileCullingEnabled = true;
+            currentCutTileGridWidth = gridWidth;
+            currentCutTileGridHeight = gridHeight;
+            currentCutTileIndexCapacity = indexCapacity;
+            unchecked
+            {
+                cutTileDispatchVersion++;
+            }
+        }
+    }
+
+    private bool ResolveCutTileCompute()
+    {
+        if (cutTileCullingCompute == null)
+        {
+            cutTileCullingCompute = Resources.Load<ComputeShader>("Sdf/SdfCutTileCulling");
+        }
+
+        if (cutTileCullingCompute == null)
+        {
+            return false;
+        }
+
+        if (cutTileKernel < 0)
+        {
+            cutTileKernel = cutTileCullingCompute.FindKernel("BuildCutTileLists");
+        }
+
+        return cutTileKernel >= 0;
+    }
+
+    private void EnsureCutTileBuffers(int tileCount, int indexCapacity)
+    {
+        if (cutTileRangeBuffer == null || allocatedCutTileCount != tileCount)
+        {
+            ReleaseBuffer(ref cutTileRangeBuffer);
+            cutTileRangeBuffer = new ComputeBuffer(tileCount, sizeof(uint) * 2, ComputeBufferType.Structured);
+            allocatedCutTileCount = tileCount;
+            lastCutTileDispatchHash = int.MinValue;
+        }
+
+        if (cutTileIndexBuffer == null || allocatedCutTileIndexCount != indexCapacity)
+        {
+            ReleaseBuffer(ref cutTileIndexBuffer);
+            cutTileIndexBuffer = new ComputeBuffer(indexCapacity, sizeof(int), ComputeBufferType.Structured);
+            allocatedCutTileIndexCount = indexCapacity;
+            lastCutTileDispatchHash = int.MinValue;
+        }
+    }
+
+    private void EnsureDummyCutTileBuffers()
+    {
+        if (dummyCutTileRangeBuffer == null)
+        {
+            dummyCutTileRangeBuffer = new ComputeBuffer(1, sizeof(uint) * 2, ComputeBufferType.Structured);
+        }
+
+        if (dummyCutTileIndexBuffer == null)
+        {
+            dummyCutTileIndexBuffer = new ComputeBuffer(1, sizeof(int), ComputeBufferType.Structured);
+        }
+    }
+
+    private void BindCutTileGlobals(bool enabled, int gridWidth, int gridHeight, int maxIndicesPerTile, int screenWidth, int screenHeight)
+    {
+        if (enabled && cutTileRangeBuffer != null && cutTileIndexBuffer != null)
+        {
+            Shader.SetGlobalBuffer(SdfCutTileRangesId, cutTileRangeBuffer);
+            Shader.SetGlobalBuffer(SdfCutTileIndicesId, cutTileIndexBuffer);
+        }
+        else
+        {
+            EnsureDummyCutTileBuffers();
+            Shader.SetGlobalBuffer(SdfCutTileRangesId, dummyCutTileRangeBuffer);
+            Shader.SetGlobalBuffer(SdfCutTileIndicesId, dummyCutTileIndexBuffer);
+        }
+
+        Shader.SetGlobalInt(SdfCutTileEnabledId, enabled ? 1 : 0);
+        Shader.SetGlobalInt(SdfCutTileGridWidthId, Mathf.Max(gridWidth, 1));
+        Shader.SetGlobalInt(SdfCutTileGridHeightId, Mathf.Max(gridHeight, 1));
+        Shader.SetGlobalInt(SdfCutTileMaxIndicesPerTileId, Mathf.Max(maxIndicesPerTile, 1));
+        Shader.SetGlobalVector(SdfCutTileScreenSizeId, new Vector4(Mathf.Max(screenWidth, 1), Mathf.Max(screenHeight, 1), 0.0f, 0.0f));
+    }
+
+    private void DisableCutTileCullingGlobals()
+    {
+        BindCutTileGlobals(false, 1, 1, 1, 1, 1);
+        currentCutTileCullingEnabled = false;
+        currentCutTileGridWidth = 0;
+        currentCutTileGridHeight = 0;
+        currentCutTileIndexCapacity = 0;
+        lastCutTileDispatchHash = int.MinValue;
+    }
+
+    private void ReleaseCutTileBuffers()
+    {
+        ReleaseBuffer(ref cutTileRangeBuffer);
+        ReleaseBuffer(ref cutTileIndexBuffer);
+        ReleaseBuffer(ref dummyCutTileRangeBuffer);
+        ReleaseBuffer(ref dummyCutTileIndexBuffer);
+        allocatedCutTileCount = 0;
+        allocatedCutTileIndexCount = 0;
+        lastCutTileDispatchHash = int.MinValue;
+    }
+
+    private static void ReleaseBuffer(ref ComputeBuffer buffer)
+    {
+        if (buffer == null)
+        {
+            return;
+        }
+
+        buffer.Release();
+        buffer = null;
+    }
+
+    private int CalculateCutTileDispatchHash(
+        Camera camera,
+        int screenWidth,
+        int screenHeight,
+        int gridWidth,
+        int gridHeight,
+        int safeMaxIndicesPerTile,
+        int sceneVersion,
+        Matrix4x4 worldToClip)
+    {
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 31 + camera.GetInstanceID();
+            hash = hash * 31 + screenWidth;
+            hash = hash * 31 + screenHeight;
+            hash = hash * 31 + gridWidth;
+            hash = hash * 31 + gridHeight;
+            hash = hash * 31 + safeMaxIndicesPerTile;
+            hash = hash * 31 + Mathf.Max(cutTilePaddingPixels, 0);
+            hash = hash * 31 + sceneVersion;
+            AppendHash(ref hash, worldToClip);
+            return hash;
+        }
+    }
+
     private static Vector3 MaxComponents(Vector3 value, Vector3 minValue)
     {
         return new Vector3(
@@ -427,6 +687,17 @@ public class SdfSharedVolumeProxy : MonoBehaviour
         }
 
         return true;
+    }
+
+    private static void AppendHash(ref int hash, Matrix4x4 value)
+    {
+        unchecked
+        {
+            for (int i = 0; i < 16; i++)
+            {
+                hash = hash * 31 + value[i].GetHashCode();
+            }
+        }
     }
 
     private void OnDrawGizmosSelected()
