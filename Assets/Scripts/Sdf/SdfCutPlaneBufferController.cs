@@ -30,6 +30,7 @@ public class SdfCutPlaneBufferController : MonoBehaviour
     [SerializeField] private int uploadedPlaneCount;
     [SerializeField] private int bufferCapacity;
     [SerializeField] private bool hasUploadedPlanes;
+    [SerializeField] private int dataVersion;
 
     private const string CutPlaneBufferName = "_CutPlanes";
     private const string CutPlaneCountName = "_CutPlaneCount";
@@ -39,9 +40,13 @@ public class SdfCutPlaneBufferController : MonoBehaviour
     private NativeArray<CutPlaneData> uploadCache;
     private MaterialPropertyBlock propertyBlock;
     private CutPlaneData[] runtimePlanes = Array.Empty<CutPlaneData>();
+    private int uploadedDataHash;
+    private int lastBoundPlaneCount = -1;
+    private int lastBoundDataVersion = -1;
 
     public int UploadedPlaneCount => uploadedPlaneCount;
     public bool HasUploadedPlanes => hasUploadedPlanes;
+    public int DataVersion => dataVersion;
 
     private void OnEnable()
     {
@@ -100,9 +105,17 @@ public class SdfCutPlaneBufferController : MonoBehaviour
     [ContextMenu("Clear All Planes")]
     public void ClearAllPlanes()
     {
+        if (uploadedPlaneCount == 0 && !hasUploadedPlanes)
+        {
+            BindPlaneCountOnly(0);
+            return;
+        }
+
         uploadedPlaneCount = 0;
         hasUploadedPlanes = false;
         runtimePlanes = Array.Empty<CutPlaneData>();
+        uploadedDataHash = 0;
+        IncrementDataVersion();
         BindPlaneCountOnly(0);
     }
 
@@ -113,7 +126,9 @@ public class SdfCutPlaneBufferController : MonoBehaviour
     public void SetPlanes(CutPlaneData[] planes)
     {
         int count = planes != null ? planes.Length : 0;
-        EnsureCapacity(count);
+        int planeDataHash = CalculatePlaneDataHash(planes, count);
+        bool storageChanged = EnsureCapacity(count);
+        bool dataChanged = storageChanged || count != uploadedPlaneCount || planeDataHash != uploadedDataHash;
 
         uploadedPlaneCount = count;
         hasUploadedPlanes = count > 0;
@@ -122,7 +137,7 @@ public class SdfCutPlaneBufferController : MonoBehaviour
             runtimePlanes = CopyPlanes(planes, count);
         }
 
-        if (count > 0)
+        if (count > 0 && dataChanged)
         {
             for (int i = 0; i < count; i++)
             {
@@ -130,6 +145,12 @@ public class SdfCutPlaneBufferController : MonoBehaviour
             }
 
             cutPlaneBuffer.SetData(uploadCache, 0, 0, count);
+        }
+
+        if (dataChanged)
+        {
+            uploadedDataHash = planeDataHash;
+            IncrementDataVersion();
         }
 
         BindResources(count);
@@ -201,7 +222,7 @@ public class SdfCutPlaneBufferController : MonoBehaviour
         }
     }
 
-    private void EnsureCapacity(int requiredCount)
+    private bool EnsureCapacity(int requiredCount)
     {
         if (requiredCount <= 0)
         {
@@ -210,7 +231,7 @@ public class SdfCutPlaneBufferController : MonoBehaviour
 
         if (cutPlaneBuffer != null && requiredCount <= bufferCapacity && uploadCache.IsCreated)
         {
-            return;
+            return false;
         }
 
         ReleaseGpuStorageOnly();
@@ -218,12 +239,18 @@ public class SdfCutPlaneBufferController : MonoBehaviour
         bufferCapacity = Mathf.NextPowerOfTwo(requiredCount);
         cutPlaneBuffer = new ComputeBuffer(bufferCapacity, CutPlaneData.Stride, ComputeBufferType.Structured);
         uploadCache = new NativeArray<CutPlaneData>(bufferCapacity, Allocator.Persistent, NativeArrayOptions.ClearMemory);
+        return true;
     }
 
     private void BindResources(int planeCount)
     {
         CacheComponents();
         if (cachedRenderer == null)
+        {
+            return;
+        }
+
+        if (lastBoundPlaneCount == planeCount && lastBoundDataVersion == dataVersion)
         {
             return;
         }
@@ -236,6 +263,8 @@ public class SdfCutPlaneBufferController : MonoBehaviour
         }
 
         cachedRenderer.SetPropertyBlock(propertyBlock);
+        lastBoundPlaneCount = planeCount;
+        lastBoundDataVersion = dataVersion;
     }
 
     private void BindPlaneCountOnly(int planeCount)
@@ -246,9 +275,16 @@ public class SdfCutPlaneBufferController : MonoBehaviour
             return;
         }
 
+        if (lastBoundPlaneCount == planeCount && lastBoundDataVersion == dataVersion)
+        {
+            return;
+        }
+
         cachedRenderer.GetPropertyBlock(propertyBlock);
         propertyBlock.SetInt(CutPlaneCountName, planeCount);
         cachedRenderer.SetPropertyBlock(propertyBlock);
+        lastBoundPlaneCount = planeCount;
+        lastBoundDataVersion = dataVersion;
     }
 
     private void ReleaseGpuStorageOnly()
@@ -269,7 +305,43 @@ public class SdfCutPlaneBufferController : MonoBehaviour
     {
         uploadedPlaneCount = 0;
         bufferCapacity = 0;
+        hasUploadedPlanes = false;
+        uploadedDataHash = 0;
+        lastBoundPlaneCount = -1;
+        lastBoundDataVersion = -1;
         ReleaseGpuStorageOnly();
+    }
+
+    private void IncrementDataVersion()
+    {
+        unchecked
+        {
+            dataVersion++;
+            if (dataVersion == 0)
+            {
+                dataVersion = 1;
+            }
+        }
+    }
+
+    private static int CalculatePlaneDataHash(CutPlaneData[] planes, int count)
+    {
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 31 + count;
+            for (int i = 0; i < count; i++)
+            {
+                CutPlaneData plane = planes[i];
+                hash = hash * 31 + plane.normal.x.GetHashCode();
+                hash = hash * 31 + plane.normal.y.GetHashCode();
+                hash = hash * 31 + plane.normal.z.GetHashCode();
+                hash = hash * 31 + plane.distance.GetHashCode();
+                hash = hash * 31 + plane.sideSign.GetHashCode();
+            }
+
+            return hash;
+        }
     }
 
     private void OnDrawGizmosSelected()

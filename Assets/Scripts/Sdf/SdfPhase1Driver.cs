@@ -286,16 +286,27 @@ public class SdfPhase1Driver : MonoBehaviour
     private Renderer cachedRenderer;
     private MeshFilter cachedMeshFilter;
     private MaterialPropertyBlock propertyBlock;
+    [SerializeField, HideInInspector] private int sceneDataVersion = 1;
+    [SerializeField, HideInInspector] private int materialPropertyUploadVersion;
+    [SerializeField, HideInInspector] private int screenSpaceGlobalUploadVersion;
+    private int lastSceneDataHash = int.MinValue;
+    private int lastMaterialPropertyHash = int.MinValue;
+    private int lastScreenSpaceGlobalHash = int.MinValue;
+    private static bool screenSpaceVolumeGlobalDisabled = true;
 
     private void OnEnable()
     {
         CacheComponents();
+        lastMaterialPropertyHash = int.MinValue;
+        lastScreenSpaceGlobalHash = int.MinValue;
+        RefreshSceneDataVersion();
         ApplyProperties();
     }
 
     private void OnValidate()
     {
         CacheComponents();
+        RefreshSceneDataVersion();
         ApplyProperties();
     }
 
@@ -364,6 +375,19 @@ public class SdfPhase1Driver : MonoBehaviour
     public Vector3 BoxExtents => boxExtents;
     public Vector3 BaseCutPlaneNormal => cutPlaneNormal.sqrMagnitude > 1e-6f ? cutPlaneNormal.normalized : Vector3.up;
     public float BaseCutPlaneOffset => cutPlaneOffset;
+    public int SceneDataVersion
+    {
+        get
+        {
+            RefreshSceneDataVersion();
+            return sceneDataVersion;
+        }
+    }
+
+    public int VolumeLightSampleCount => volumeLightSamples;
+    public int VolumeShadowSampleCount => volumeShadowSamples;
+    public int MaterialPropertyUploadVersion => materialPropertyUploadVersion;
+    public int ScreenSpaceGlobalUploadVersion => screenSpaceGlobalUploadVersion;
 
     public void SetVolumePointLight(bool enabled, Vector3 positionWS, Color color, float intensity, float range)
     {
@@ -414,11 +438,11 @@ public class SdfPhase1Driver : MonoBehaviour
         ApplyProperties();
     }
 
-    public void UploadScreenSpaceVolumeGlobals(Transform volumeTransform, bool hasSceneSdf, int visibilityMode)
+    public bool UploadScreenSpaceVolumeGlobals(Transform volumeTransform, bool hasSceneSdf, int visibilityMode)
     {
         if (volumeTransform == null)
         {
-            return;
+            return false;
         }
 
         Vector3 safeVolumeFogShapeExtents = new Vector3(
@@ -428,6 +452,16 @@ public class SdfPhase1Driver : MonoBehaviour
         bool volumeModeCanRender = volumeContributionMode == VolumeContributionMode.Full
             || volumeContributionMode == VolumeContributionMode.VolumeOnly;
         bool volumeEnabled = volumeLightEnabled && volumeModeCanRender;
+        int globalHash = CalculateScreenSpaceGlobalHash(
+            volumeTransform,
+            hasSceneSdf,
+            visibilityMode,
+            safeVolumeFogShapeExtents,
+            volumeEnabled);
+        if (globalHash == lastScreenSpaceGlobalHash && screenSpaceVolumeGlobalDisabled == !volumeEnabled)
+        {
+            return false;
+        }
 
         Shader.SetGlobalFloat(SdfScreenSpaceVolumeEnabledId, volumeEnabled ? 1.0f : 0.0f);
         Shader.SetGlobalMatrix(SdfVolumeWorldToLocalId, volumeTransform.worldToLocalMatrix);
@@ -495,11 +529,25 @@ public class SdfPhase1Driver : MonoBehaviour
         Shader.SetGlobalFloat(HitEpsilonId, hitEpsilon);
         Shader.SetGlobalVector(ProxyBoundsMinId, new Vector4(-0.5f, -0.5f, -0.5f, 0.0f));
         Shader.SetGlobalVector(ProxyBoundsMaxId, new Vector4(0.5f, 0.5f, 0.5f, 0.0f));
+        lastScreenSpaceGlobalHash = globalHash;
+        screenSpaceVolumeGlobalDisabled = !volumeEnabled;
+        unchecked
+        {
+            screenSpaceGlobalUploadVersion++;
+        }
+
+        return true;
     }
 
     public static void DisableScreenSpaceVolumeGlobals()
     {
+        if (screenSpaceVolumeGlobalDisabled)
+        {
+            return;
+        }
+
         Shader.SetGlobalFloat(SdfScreenSpaceVolumeEnabledId, 0.0f);
+        screenSpaceVolumeGlobalDisabled = true;
     }
 
     public void SetCloudShapeSettings(
@@ -705,6 +753,216 @@ public class SdfPhase1Driver : MonoBehaviour
         ApplyProperties();
     }
 
+    private void RefreshSceneDataVersion()
+    {
+        int sceneDataHash = CalculateSceneDataHash();
+        if (sceneDataHash == lastSceneDataHash)
+        {
+            return;
+        }
+
+        lastSceneDataHash = sceneDataHash;
+        unchecked
+        {
+            sceneDataVersion++;
+            if (sceneDataVersion == 0)
+            {
+                sceneDataVersion = 1;
+            }
+        }
+    }
+
+    private int CalculateSceneDataHash()
+    {
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 31 + (int)shapeMode;
+            AppendHash(ref hash, sphereCenter);
+            hash = hash * 31 + sphereRadius.GetHashCode();
+            AppendHash(ref hash, boxExtents);
+            AppendHash(ref hash, BaseCutPlaneNormal);
+            hash = hash * 31 + cutPlaneOffset.GetHashCode();
+            return hash;
+        }
+    }
+
+    private int CalculateMaterialPropertyHash(
+        Bounds meshBounds,
+        Vector3 safeVolumeFogShapeExtents,
+        Vector3 normalizedPlaneNormal,
+        bool volumeEnabled,
+        float sdfSurfaceContribution,
+        float surfaceContribution,
+        float backgroundContribution)
+    {
+        unchecked
+        {
+            int hash = 17;
+            AppendHash(ref hash, baseColor);
+            hash = hash * 31 + ambientStrength.GetHashCode();
+            hash = hash * 31 + diffuseStrength.GetHashCode();
+            hash = hash * 31 + receiveMainLightShadowStrength.GetHashCode();
+            hash = hash * 31 + sdfSoftShadowStrength.GetHashCode();
+            hash = hash * 31 + sdfSoftShadowSharpness.GetHashCode();
+            hash = hash * 31 + sdfSoftShadowSteps;
+            hash = hash * 31 + sdfSoftShadowStart.GetHashCode();
+            hash = hash * 31 + sdfSoftShadowDistance.GetHashCode();
+            hash = hash * 31 + sdfSoftShadowNormalBias.GetHashCode();
+            hash = hash * 31 + sdfSoftShadowMinStepScale.GetHashCode();
+            hash = hash * 31 + sdfSoftShadowMaxStepFraction.GetHashCode();
+            hash = hash * 31 + sdfSoftShadowDistanceFadeStart.GetHashCode();
+            hash = hash * 31 + sdfSoftShadowSceneStrength.GetHashCode();
+            hash = hash * 31 + sdfSoftShadowSelfIgnoreDistance.GetHashCode();
+            hash = hash * 31 + sdfAmbientOcclusionStrength.GetHashCode();
+            hash = hash * 31 + sdfAmbientOcclusionRadius.GetHashCode();
+            hash = hash * 31 + sdfAmbientOcclusionSteps;
+            hash = hash * 31 + sdfAmbientOcclusionBias.GetHashCode();
+            AppendHash(ref hash, cutFaceColor);
+            hash = hash * 31 + cutFaceBlend.GetHashCode();
+            hash = hash * 31 + cutFaceDominanceSoftness.GetHashCode();
+            hash = hash * 31 + cutFaceOcclusionStrength.GetHashCode();
+            hash = hash * 31 + cutFaceOcclusionDistance.GetHashCode();
+            hash = hash * 31 + cutFaceBandSoftness.GetHashCode();
+            hash = hash * 31 + cutFaceEdgeWidth.GetHashCode();
+            hash = hash * 31 + cutFaceEdgeBoost.GetHashCode();
+            hash = hash * 31 + cutFaceFreshnessBoost.GetHashCode();
+            hash = hash * 31 + (volumeEnabled ? 1 : 0);
+            hash = hash * 31 + sdfSurfaceContribution.GetHashCode();
+            hash = hash * 31 + surfaceContribution.GetHashCode();
+            hash = hash * 31 + backgroundContribution.GetHashCode();
+            AppendVolumeSettingsHash(ref hash, safeVolumeFogShapeExtents);
+            hash = hash * 31 + maxSteps;
+            hash = hash * 31 + maxDistance.GetHashCode();
+            hash = hash * 31 + hitEpsilon.GetHashCode();
+            hash = hash * 31 + normalEpsilon.GetHashCode();
+            hash = hash * 31 + (int)shapeMode;
+            AppendHash(ref hash, sphereCenter);
+            hash = hash * 31 + sphereRadius.GetHashCode();
+            AppendHash(ref hash, boxExtents);
+            AppendHash(ref hash, normalizedPlaneNormal);
+            hash = hash * 31 + cutPlaneOffset.GetHashCode();
+            AppendHash(ref hash, meshBounds.min);
+            AppendHash(ref hash, meshBounds.max);
+            hash = hash * 31 + (int)debugView;
+            return hash;
+        }
+    }
+
+    private int CalculateScreenSpaceGlobalHash(
+        Transform volumeTransform,
+        bool hasSceneSdf,
+        int visibilityMode,
+        Vector3 safeVolumeFogShapeExtents,
+        bool volumeEnabled)
+    {
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 31 + (volumeEnabled ? 1 : 0);
+            AppendHash(ref hash, volumeTransform.worldToLocalMatrix);
+            AppendHash(ref hash, volumeTransform.localToWorldMatrix);
+            hash = hash * 31 + Mathf.Clamp(visibilityMode, 0, 1);
+            hash = hash * 31 + (hasSceneSdf ? 1 : 0);
+            AppendVolumeSettingsHash(ref hash, safeVolumeFogShapeExtents);
+            hash = hash * 31 + (int)debugView;
+            hash = hash * 31 + maxDistance.GetHashCode();
+            hash = hash * 31 + hitEpsilon.GetHashCode();
+            return hash;
+        }
+    }
+
+    private void AppendVolumeSettingsHash(ref int hash, Vector3 safeVolumeFogShapeExtents)
+    {
+        unchecked
+        {
+            hash = hash * 31 + volumeLightIntensity.GetHashCode();
+            hash = hash * 31 + volumeLightDensity.GetHashCode();
+            hash = hash * 31 + volumeLightAnisotropy.GetHashCode();
+            hash = hash * 31 + volumeLightSamples;
+            hash = hash * 31 + volumeLightMaxDistance.GetHashCode();
+            hash = hash * 31 + volumeLightMaxStepLength.GetHashCode();
+            hash = hash * 31 + volumeLightShadowStrength.GetHashCode();
+            hash = hash * 31 + volumeLightShadowBias.GetHashCode();
+            hash = hash * 31 + volumeLightSurfaceFadeDistance.GetHashCode();
+            hash = hash * 31 + volumeSurfaceOcclusionStrength.GetHashCode();
+            hash = hash * 31 + volumeSurfaceOcclusionRadius.GetHashCode();
+            hash = hash * 31 + volumeLightPlaneBand.GetHashCode();
+            hash = hash * 31 + volumeLightRemovedDepth.GetHashCode();
+            hash = hash * 31 + volumeLightShapeDepth.GetHashCode();
+            hash = hash * 31 + volumeLightNoiseScale.GetHashCode();
+            hash = hash * 31 + volumeLightNoiseStrength.GetHashCode();
+            hash = hash * 31 + volumeLightNoiseDrift.GetHashCode();
+            hash = hash * 31 + volumeBaseFogDensity.GetHashCode();
+            hash = hash * 31 + volumeHeightFogStrength.GetHashCode();
+            hash = hash * 31 + volumeCutFogBoost.GetHashCode();
+            hash = hash * 31 + volumeNoiseContrast.GetHashCode();
+            hash = hash * 31 + volumeAbsorptionDensity.GetHashCode();
+            hash = hash * 31 + volumeDensityThreshold.GetHashCode();
+            hash = hash * 31 + volumeAlphaClipThreshold.GetHashCode();
+            hash = hash * 31 + volumeEmissionIntensity.GetHashCode();
+            AppendHash(ref hash, volumeEmissionColor);
+            hash = hash * 31 + (int)volumeFogShapeMode;
+            AppendHash(ref hash, volumeFogShapeCenter);
+            AppendHash(ref hash, safeVolumeFogShapeExtents);
+            hash = hash * 31 + volumeFogShapeRadius.GetHashCode();
+            hash = hash * 31 + volumeFogShapeHeight.GetHashCode();
+            hash = hash * 31 + volumeFogShapeEdgeSoftness.GetHashCode();
+            hash = hash * 31 + volumeFogShapeNoiseErosion.GetHashCode();
+            hash = hash * 31 + volumeFogShapeNoiseScale.GetHashCode();
+            hash = hash * 31 + volumeCloudCoverage.GetHashCode();
+            hash = hash * 31 + volumeCloudSoftness.GetHashCode();
+            hash = hash * 31 + volumeCloudDetailStrength.GetHashCode();
+            hash = hash * 31 + volumeCloudDetailScale.GetHashCode();
+            hash = hash * 31 + volumeCloudWarpStrength.GetHashCode();
+            hash = hash * 31 + volumeCloudLobeCount;
+            AppendHash(ref hash, volumeCloudLobeSpread);
+            hash = hash * 31 + volumeCloudLobeRadius.GetHashCode();
+            hash = hash * 31 + volumeCloudDensityBoost.GetHashCode();
+            hash = hash * 31 + volumeShadowSamples;
+            hash = hash * 31 + volumeShadowMaxDistance.GetHashCode();
+            hash = hash * 31 + (volumePointLightEnabled ? 1 : 0);
+            AppendHash(ref hash, volumePointLightPositionWS);
+            AppendHash(ref hash, volumePointLightColor);
+            hash = hash * 31 + volumePointLightIntensity.GetHashCode();
+            hash = hash * 31 + volumePointLightRange.GetHashCode();
+            hash = hash * 31 + volumeExposure.GetHashCode();
+            AppendHash(ref hash, volumeColorTint);
+        }
+    }
+
+    private static void AppendHash(ref int hash, Vector3 value)
+    {
+        unchecked
+        {
+            hash = hash * 31 + value.x.GetHashCode();
+            hash = hash * 31 + value.y.GetHashCode();
+            hash = hash * 31 + value.z.GetHashCode();
+        }
+    }
+
+    private static void AppendHash(ref int hash, Color value)
+    {
+        unchecked
+        {
+            hash = hash * 31 + value.r.GetHashCode();
+            hash = hash * 31 + value.g.GetHashCode();
+            hash = hash * 31 + value.b.GetHashCode();
+            hash = hash * 31 + value.a.GetHashCode();
+        }
+    }
+
+    private static void AppendHash(ref int hash, Matrix4x4 value)
+    {
+        unchecked
+        {
+            for (int i = 0; i < 16; i++)
+            {
+                hash = hash * 31 + value[i].GetHashCode();
+            }
+        }
+    }
+
     private void ApplyProperties()
     {
         if (cachedRenderer == null || cachedMeshFilter == null)
@@ -727,6 +985,25 @@ public class SdfPhase1Driver : MonoBehaviour
         Vector3 normalizedPlaneNormal = cutPlaneNormal.sqrMagnitude > 1e-6f
             ? cutPlaneNormal.normalized
             : Vector3.up;
+
+        bool volumeModeCanRender = volumeContributionMode == VolumeContributionMode.Full
+            || volumeContributionMode == VolumeContributionMode.VolumeOnly;
+        bool volumeEnabled = volumeLightEnabled && volumeModeCanRender;
+        float sdfSurfaceContribution = volumeContributionMode == VolumeContributionMode.VolumeOnly || volumeContributionMode == VolumeContributionMode.Disabled ? 0.0f : 1.0f;
+        float surfaceContribution = volumeEnabled && volumeContributionMode == VolumeContributionMode.Full ? 1.0f : 0.0f;
+        float backgroundContribution = volumeEnabled && (volumeContributionMode == VolumeContributionMode.Full || volumeContributionMode == VolumeContributionMode.VolumeOnly) ? 1.0f : 0.0f;
+        int materialPropertyHash = CalculateMaterialPropertyHash(
+            meshBounds,
+            safeVolumeFogShapeExtents,
+            normalizedPlaneNormal,
+            volumeEnabled,
+            sdfSurfaceContribution,
+            surfaceContribution,
+            backgroundContribution);
+        if (materialPropertyHash == lastMaterialPropertyHash)
+        {
+            return;
+        }
 
         cachedRenderer.GetPropertyBlock(propertyBlock);
         propertyBlock.SetColor(BaseColorId, baseColor);
@@ -757,12 +1034,6 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(CutFaceEdgeWidthId, cutFaceEdgeWidth);
         propertyBlock.SetFloat(CutFaceEdgeBoostId, cutFaceEdgeBoost);
         propertyBlock.SetFloat(CutFaceFreshnessBoostId, cutFaceFreshnessBoost);
-        bool volumeModeCanRender = volumeContributionMode == VolumeContributionMode.Full
-            || volumeContributionMode == VolumeContributionMode.VolumeOnly;
-        bool volumeEnabled = volumeLightEnabled && volumeModeCanRender;
-        float sdfSurfaceContribution = volumeContributionMode == VolumeContributionMode.VolumeOnly || volumeContributionMode == VolumeContributionMode.Disabled ? 0.0f : 1.0f;
-        float surfaceContribution = volumeEnabled && volumeContributionMode == VolumeContributionMode.Full ? 1.0f : 0.0f;
-        float backgroundContribution = volumeEnabled && (volumeContributionMode == VolumeContributionMode.Full || volumeContributionMode == VolumeContributionMode.VolumeOnly) ? 1.0f : 0.0f;
         propertyBlock.SetFloat(SdfSurfaceContributionId, sdfSurfaceContribution);
         propertyBlock.SetFloat(UseSceneSdfId, 0.0f);
         propertyBlock.SetFloat(VolumeLightEnabledId, volumeEnabled ? 1.0f : 0.0f);
@@ -838,5 +1109,10 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetInt(SdfSceneShapeCountId, 0);
 
         cachedRenderer.SetPropertyBlock(propertyBlock);
+        lastMaterialPropertyHash = materialPropertyHash;
+        unchecked
+        {
+            materialPropertyUploadVersion++;
+        }
     }
 }

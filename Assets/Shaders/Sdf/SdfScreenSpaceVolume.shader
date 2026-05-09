@@ -505,6 +505,23 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 emissionRadiance = density * max(_VolumeEmissionIntensity, 0.0) * _VolumeEmissionColor.rgb;
             }
 
+            float SdfLuminance(float3 color)
+            {
+                return dot(color, float3(0.2126, 0.7152, 0.0722));
+            }
+
+            float EvaluateEmptyVolumeStepScale(float sigmaT, float densityDebug, float shapeMaskDebug)
+            {
+                float mediumPresence = max(saturate(densityDebug * 8.0), saturate(shapeMaskDebug));
+                float emptyScale = lerp(2.0, 1.0, smoothstep(0.02, 0.28, mediumPresence));
+                return sigmaT <= 1e-5 ? emptyScale : 1.0;
+            }
+
+            bool HasVolumeSampleContribution(float sigmaT, float3 emissionRadiance)
+            {
+                return sigmaT > 1e-5 || SdfLuminance(emissionRadiance) > 1e-5;
+            }
+
             float EvaluateScatteringPhase(float3 lightDirWS, float3 viewDirWS)
             {
                 float g = clamp(_VolumeLightAnisotropy, -0.8, 0.8);
@@ -560,18 +577,28 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 int distanceShadowStepCount = max((int)ceil(maxShadowDistance / shadowMaxStepLength), 1);
                 int shadowStepCount = min(max(requestedShadowStepCount, distanceShadowStepCount), 64);
                 float stepLength = maxShadowDistance / shadowStepCount;
-                float stepLengthWS = stepLength * ObjectRayUnitToWorldLength(shadowOrigin, lightDir);
+                float worldUnitsPerVolumeUnit = ObjectRayUnitToWorldLength(shadowOrigin, lightDir);
                 float transmittance = 1.0;
+                float t = 0.0;
 
                 [loop]
                 for (int stepIndex = 0; stepIndex < 64; stepIndex++)
                 {
-                    if (stepIndex >= shadowStepCount) break;
-                    float3 p = shadowOrigin + lightDir * ((stepIndex + 0.5) * stepLength);
+                    if (stepIndex >= shadowStepCount || t >= maxShadowDistance) break;
+                    float currentStepLength = min(stepLength, maxShadowDistance - t);
+                    float3 p = shadowOrigin + lightDir * (t + currentStepLength * 0.5);
                     float sigmaA, sigmaS, sigmaT, shapeMaskDebug, densityDebug;
                     float3 emissionRadiance;
                     GetParticipatingMedia(p, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug);
-                    transmittance *= exp(-sigmaT * stepLengthWS);
+
+                    if (!HasVolumeSampleContribution(sigmaT, emissionRadiance))
+                    {
+                        t += min(currentStepLength * EvaluateEmptyVolumeStepScale(sigmaT, densityDebug, shapeMaskDebug), maxShadowDistance - t);
+                        continue;
+                    }
+
+                    transmittance *= exp(-sigmaT * currentStepLength * worldUnitsPerVolumeUnit);
+                    t += currentStepLength;
                     if (transmittance < 0.01) break;
                 }
 
@@ -599,6 +626,12 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
 
                 float maxShadowDistance = min(min(requestedMaxDistance, max(_VolumeShadowMaxDistance, _HitEpsilon)), max(tExit, 0.0));
                 shadowSample.geometryVisibility = TraceVolumeGeometryVisibility(shadowOrigin, lightDir, maxShadowDistance);
+                if (shadowSample.geometryVisibility <= 0.0 && (int)round(_DebugView) != 12)
+                {
+                    shadowSample.combinedVisibility = lerp(1.0, 0.0, saturate(_VolumeLightShadowStrength));
+                    return shadowSample;
+                }
+
                 shadowSample.mediaTransmittance = TraceVolumeMediaTransmittance(shadowOrigin, lightDir, maxShadowDistance);
                 shadowSample.combinedVisibility = lerp(1.0, saturate(shadowSample.geometryVisibility * shadowSample.mediaTransmittance), saturate(_VolumeLightShadowStrength));
                 return shadowSample;
@@ -662,27 +695,34 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 int distanceSampleCount = max((int)ceil(segmentLength / max(_VolumeLightMaxStepLength, _HitEpsilon)), 1);
                 int sampleCount = min(max(requestedSampleCount, distanceSampleCount), 96);
                 float stepLength = segmentLength / sampleCount;
-                float stepLengthWS = stepLength * ObjectRayUnitToWorldLength(rayOrigin, rayDir);
+                float worldUnitsPerVolumeUnit = ObjectRayUnitToWorldLength(rayOrigin, rayDir);
                 float3 viewDirWS = normalize(-rayDirWS);
                 float mainLightPhase = EvaluateScatteringPhase(mainLightDirWS, viewDirWS);
                 float3 mainLightDir = normalize(WorldDirToVolume(mainLightDirWS));
                 float3 pointLightPosition = WorldToVolume(_VolumePointLightPositionWS.xyz);
+                float mainLightLuminance = SdfLuminance(mainLightColor);
                 float transmittance = 1.0;
                 float shadowAccumulation = 0.0;
                 float geometryShadowAccumulation = 0.0;
                 float mediaShadowAccumulation = 0.0;
                 float contributingSamples = 0.0;
                 float scatteringVisibilityAccumulation = 0.0;
+                float sampleT = segmentStart;
 
                 [loop]
                 for (int sampleIndex = 0; sampleIndex < 96; sampleIndex++)
                 {
-                    if (sampleIndex >= sampleCount) break;
-                    float3 samplePosition = rayOrigin + rayDir * (segmentStart + (sampleIndex + 0.5) * stepLength);
+                    if (sampleIndex >= sampleCount || sampleT >= segmentEnd) break;
+                    float currentStepLength = min(stepLength, segmentEnd - sampleT);
+                    float3 samplePosition = rayOrigin + rayDir * (sampleT + currentStepLength * 0.5);
                     float sigmaA, sigmaS, sigmaT, shapeMaskDebug, densityDebug;
                     float3 emissionRadiance;
                     GetParticipatingMedia(samplePosition, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug);
-                    if (sigmaT <= 1e-5 && dot(emissionRadiance, float3(0.2126, 0.7152, 0.0722)) <= 1e-5) continue;
+                    if (!HasVolumeSampleContribution(sigmaT, emissionRadiance))
+                    {
+                        sampleT += min(currentStepLength * EvaluateEmptyVolumeStepScale(sigmaT, densityDebug, shapeMaskDebug), segmentEnd - sampleT);
+                        continue;
+                    }
 
                     float3 samplePositionWS = VolumeToWorld(samplePosition);
                     float surfaceOcclusion = EvaluateSceneSurfaceOcclusion(samplePosition);
@@ -692,13 +732,16 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                     float weightedMediaShadow = 0.0;
                     float sourceWeight = 0.0;
 
-                    VolumeShadowSample mainShadow = EvaluateVolumeLightShadow(samplePosition, mainLightDir, _VolumeShadowMaxDistance);
-                    float mainWeight = max(dot(mainLightColor, float3(0.2126, 0.7152, 0.0722)), 1e-4);
-                    sourceRadiance += mainLightColor * mainShadow.combinedVisibility * mainLightPhase;
-                    weightedShadow += mainShadow.combinedVisibility * mainWeight;
-                    weightedGeometryShadow += mainShadow.geometryVisibility * mainWeight;
-                    weightedMediaShadow += mainShadow.mediaTransmittance * mainWeight;
-                    sourceWeight += mainWeight;
+                    if (mainLightLuminance * sigmaS * max(_VolumeLightIntensity, 0.0) > 1e-4)
+                    {
+                        VolumeShadowSample mainShadow = EvaluateVolumeLightShadow(samplePosition, mainLightDir, _VolumeShadowMaxDistance);
+                        float mainWeight = max(mainLightLuminance, 1e-4);
+                        sourceRadiance += mainLightColor * mainShadow.combinedVisibility * mainLightPhase;
+                        weightedShadow += mainShadow.combinedVisibility * mainWeight;
+                        weightedGeometryShadow += mainShadow.geometryVisibility * mainWeight;
+                        weightedMediaShadow += mainShadow.mediaTransmittance * mainWeight;
+                        sourceWeight += mainWeight;
+                    }
 
                     if (_VolumePointLightEnabled > 0.5 && _VolumePointLightIntensity > 0.0 && _VolumePointLightRange > _HitEpsilon)
                     {
@@ -713,21 +756,26 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                             float pointPhase = EvaluateScatteringPhase(pointLightDirWS, viewDirWS);
                             float attenuation = pointRangeAttenuation * pointRangeAttenuation / pointDistanceSq;
                             float3 pointRadiance = _VolumePointLightColor.rgb * (_VolumePointLightIntensity * attenuation);
-                            VolumeShadowSample pointShadow = EvaluateVolumeLightShadow(samplePosition, pointLightDir, length(pointLightPosition - samplePosition));
-                            float pointWeight = max(dot(pointRadiance, float3(0.2126, 0.7152, 0.0722)), 1e-4);
-                            sourceRadiance += pointRadiance * pointShadow.combinedVisibility * pointPhase;
-                            weightedShadow += pointShadow.combinedVisibility * pointWeight;
-                            weightedGeometryShadow += pointShadow.geometryVisibility * pointWeight;
-                            weightedMediaShadow += pointShadow.mediaTransmittance * pointWeight;
-                            sourceWeight += pointWeight;
+                            float pointLuminance = SdfLuminance(pointRadiance);
+                            if (pointLuminance * sigmaS * max(_VolumeLightIntensity, 0.0) > 1e-4)
+                            {
+                                VolumeShadowSample pointShadow = EvaluateVolumeLightShadow(samplePosition, pointLightDir, length(pointLightPosition - samplePosition));
+                                float pointWeight = max(pointLuminance, 1e-4);
+                                sourceRadiance += pointRadiance * pointShadow.combinedVisibility * pointPhase;
+                                weightedShadow += pointShadow.combinedVisibility * pointWeight;
+                                weightedGeometryShadow += pointShadow.geometryVisibility * pointWeight;
+                                weightedMediaShadow += pointShadow.mediaTransmittance * pointWeight;
+                                sourceWeight += pointWeight;
+                            }
                         }
                     }
 
-                    float segmentTransmittance = exp(-sigmaT * stepLengthWS);
+                    float currentStepLengthWS = currentStepLength * worldUnitsPerVolumeUnit;
+                    float segmentTransmittance = exp(-sigmaT * currentStepLengthWS);
                     float3 sourceTerm = (sourceRadiance * surfaceOcclusion) * max(_VolumeLightIntensity, 0.0) * sigmaS + emissionRadiance * surfaceOcclusion;
-                    float sourceIntegral = sigmaT > 1e-5 ? (1.0 - segmentTransmittance) / sigmaT : stepLengthWS;
+                    float sourceIntegral = sigmaT > 1e-5 ? (1.0 - segmentTransmittance) / sigmaT : currentStepLengthWS;
                     terms.scattering += transmittance * sourceTerm * sourceIntegral;
-                    scatteringVisibilityAccumulation += transmittance * dot(sourceTerm, float3(0.2126, 0.7152, 0.0722)) * stepLengthWS;
+                    scatteringVisibilityAccumulation += transmittance * SdfLuminance(sourceTerm) * currentStepLengthWS;
                     transmittance *= segmentTransmittance;
 
                     terms.densityDebug = max(terms.densityDebug, densityDebug);
@@ -735,11 +783,16 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                     terms.sigmaSDebug = max(terms.sigmaSDebug, sigmaS);
                     terms.sigmaTDebug = max(terms.sigmaTDebug, sigmaT);
                     terms.shapeMaskDebug = max(terms.shapeMaskDebug, shapeMaskDebug);
-                    float inverseSourceWeight = rcp(max(sourceWeight, 1e-4));
-                    shadowAccumulation += weightedShadow * inverseSourceWeight;
-                    geometryShadowAccumulation += weightedGeometryShadow * inverseSourceWeight;
-                    mediaShadowAccumulation += weightedMediaShadow * inverseSourceWeight;
-                    contributingSamples += 1.0;
+                    if (sourceWeight > 0.0)
+                    {
+                        float inverseSourceWeight = rcp(max(sourceWeight, 1e-4));
+                        shadowAccumulation += weightedShadow * inverseSourceWeight;
+                        geometryShadowAccumulation += weightedGeometryShadow * inverseSourceWeight;
+                        mediaShadowAccumulation += weightedMediaShadow * inverseSourceWeight;
+                        contributingSamples += 1.0;
+                    }
+
+                    sampleT += currentStepLength;
                     if (transmittance < 0.01) break;
                 }
 

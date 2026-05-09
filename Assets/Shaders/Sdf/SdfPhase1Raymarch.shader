@@ -1130,6 +1130,23 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 emissionRadiance = density * max(_VolumeEmissionIntensity, 0.0) * _VolumeEmissionColor.rgb;
             }
 
+            float SdfLuminance(float3 color)
+            {
+                return dot(color, float3(0.2126, 0.7152, 0.0722));
+            }
+
+            float EvaluateEmptyVolumeStepScale(float sigmaT, float densityDebug, float shapeMaskDebug)
+            {
+                float mediumPresence = max(saturate(densityDebug * 8.0), saturate(shapeMaskDebug));
+                float emptyScale = lerp(2.0, 1.0, smoothstep(0.02, 0.28, mediumPresence));
+                return sigmaT <= 1e-5 ? emptyScale : 1.0;
+            }
+
+            bool HasVolumeSampleContribution(float sigmaT, float3 emissionRadiance)
+            {
+                return sigmaT > 1e-5 || SdfLuminance(emissionRadiance) > 1e-5;
+            }
+
             float TraceVolumeGeometryVisibility(float3 shadowOriginOS, float3 lightDirOS, float maxShadowDistance)
             {
                 if (maxShadowDistance <= _HitEpsilon)
@@ -1175,14 +1192,19 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 int shadowStepCount = min(max(requestedShadowStepCount, distanceShadowStepCount), 64);
                 float stepLength = maxShadowDistance / shadowStepCount;
                 float worldUnitsPerObjectUnit = ObjectRayUnitToWorldLength(shadowOriginOS, lightDirOS);
-                float stepLengthWS = stepLength * worldUnitsPerObjectUnit;
                 float transmittance = 1.0;
+                float t = 0.0;
 
                 [loop]
-                for (int stepIndex = 0; stepIndex < shadowStepCount; stepIndex++)
+                for (int stepIndex = 0; stepIndex < 64; stepIndex++)
                 {
-                    float sampleT = (stepIndex + 0.5) * stepLength;
-                    float3 p = shadowOriginOS + lightDirOS * sampleT;
+                    if (stepIndex >= shadowStepCount || t >= maxShadowDistance)
+                    {
+                        break;
+                    }
+
+                    float currentStepLength = min(stepLength, maxShadowDistance - t);
+                    float3 p = shadowOriginOS + lightDirOS * (t + currentStepLength * 0.5);
 
                     float sigmaA;
                     float sigmaS;
@@ -1191,7 +1213,15 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     float shapeMaskDebug;
                     float densityDebug;
                     GetParticipatingMedia(p, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug);
-                    transmittance *= exp(-sigmaT * stepLengthWS);
+
+                    if (!HasVolumeSampleContribution(sigmaT, emissionRadiance))
+                    {
+                        t += min(currentStepLength * EvaluateEmptyVolumeStepScale(sigmaT, densityDebug, shapeMaskDebug), maxShadowDistance - t);
+                        continue;
+                    }
+
+                    transmittance *= exp(-sigmaT * currentStepLength * worldUnitsPerObjectUnit);
+                    t += currentStepLength;
 
                     if (transmittance < 0.01)
                     {
@@ -1232,6 +1262,12 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 }
 
                 shadowSample.geometryVisibility = TraceVolumeGeometryVisibility(shadowOriginOS, lightDirOS, maxShadowDistance);
+                if (shadowSample.geometryVisibility <= 0.0 && (int)round(_DebugView) != 12)
+                {
+                    shadowSample.combinedVisibility = lerp(1.0, 0.0, saturate(_VolumeLightShadowStrength));
+                    return shadowSample;
+                }
+
                 shadowSample.mediaTransmittance = TraceVolumeMediaTransmittance(shadowOriginOS, lightDirOS, maxShadowDistance);
                 shadowSample.combinedVisibility = shadowSample.geometryVisibility * shadowSample.mediaTransmittance;
                 shadowSample.combinedVisibility = lerp(1.0, saturate(shadowSample.combinedVisibility), saturate(_VolumeLightShadowStrength));
@@ -1351,7 +1387,6 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 int sampleCount = min(max(requestedSampleCount, distanceSampleCount), 96);
                 float stepLength = segmentLength / sampleCount;
                 float worldUnitsPerObjectUnit = ObjectRayUnitToWorldLength(rayOriginOS, rayDirOS);
-                float stepLengthWS = stepLength * worldUnitsPerObjectUnit;
                 float3 viewDirWS = normalize(-rayDirWS);
                 float mainLightPhase = EvaluateScatteringPhase(mainLightDirWS, viewDirWS);
                 float transmittance = 1.0;
@@ -1367,12 +1402,19 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float contributingSamples = 0.0;
                 float3 mainLightDirOS = normalize(TransformWorldToObjectDir(mainLightDirWS));
                 float3 pointLightPositionOS = TransformWorldToObject(_VolumePointLightPositionWS.xyz);
+                float mainLightLuminance = SdfLuminance(mainLightColor);
+                float sampleT = segmentStart;
 
                 [loop]
-                for (int sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++)
+                for (int sampleIndex = 0; sampleIndex < 96; sampleIndex++)
                 {
-                    float sampleT = segmentStart + (sampleIndex + 0.5) * stepLength;
-                    float3 samplePositionOS = rayOriginOS + rayDirOS * sampleT;
+                    if (sampleIndex >= sampleCount || sampleT >= segmentEnd)
+                    {
+                        break;
+                    }
+
+                    float currentStepLength = min(stepLength, segmentEnd - sampleT);
+                    float3 samplePositionOS = rayOriginOS + rayDirOS * (sampleT + currentStepLength * 0.5);
                     float sigmaA;
                     float sigmaS;
                     float sigmaT;
@@ -1381,8 +1423,9 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     float densityDebug;
                     GetParticipatingMedia(samplePositionOS, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug);
 
-                    if (sigmaT <= 1e-5 && dot(emissionRadiance, float3(0.2126, 0.7152, 0.0722)) <= 1e-5)
+                    if (!HasVolumeSampleContribution(sigmaT, emissionRadiance))
                     {
+                        sampleT += min(currentStepLength * EvaluateEmptyVolumeStepScale(sigmaT, densityDebug, shapeMaskDebug), segmentEnd - sampleT);
                         continue;
                     }
 
@@ -1393,13 +1436,16 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     float weightedMediaShadow = 0.0;
                     float sourceWeight = 0.0;
 
-                    SdfVolumeShadowSample mainShadow = EvaluateVolumeLightShadow(samplePositionOS, mainLightDirOS, _VolumeShadowMaxDistance);
-                    float mainWeight = max(dot(mainLightColor, float3(0.2126, 0.7152, 0.0722)), 1e-4);
-                    sourceRadiance += mainLightColor * mainShadow.combinedVisibility * mainLightPhase;
-                    weightedShadow += mainShadow.combinedVisibility * mainWeight;
-                    weightedGeometryShadow += mainShadow.geometryVisibility * mainWeight;
-                    weightedMediaShadow += mainShadow.mediaTransmittance * mainWeight;
-                    sourceWeight += mainWeight;
+                    if (mainLightLuminance * sigmaS * max(_VolumeLightIntensity, 0.0) > 1e-4)
+                    {
+                        SdfVolumeShadowSample mainShadow = EvaluateVolumeLightShadow(samplePositionOS, mainLightDirOS, _VolumeShadowMaxDistance);
+                        float mainWeight = max(mainLightLuminance, 1e-4);
+                        sourceRadiance += mainLightColor * mainShadow.combinedVisibility * mainLightPhase;
+                        weightedShadow += mainShadow.combinedVisibility * mainWeight;
+                        weightedGeometryShadow += mainShadow.geometryVisibility * mainWeight;
+                        weightedMediaShadow += mainShadow.mediaTransmittance * mainWeight;
+                        sourceWeight += mainWeight;
+                    }
 
                     if (_VolumePointLightEnabled > 0.5 && _VolumePointLightIntensity > 0.0 && _VolumePointLightRange > _HitEpsilon)
                     {
@@ -1416,22 +1462,28 @@ Shader "Custom/Sdf/Phase1Raymarch"
                             float pointPhase = EvaluateScatteringPhase(pointLightDirWS, viewDirWS);
                             float attenuation = pointRangeAttenuation * pointRangeAttenuation / pointDistanceSq;
                             float3 pointRadiance = _VolumePointLightColor.rgb * (_VolumePointLightIntensity * attenuation);
-                            SdfVolumeShadowSample pointShadow = EvaluateVolumeLightShadow(samplePositionOS, pointLightDirOS, pointDistanceOS);
-                            float pointWeight = max(dot(pointRadiance, float3(0.2126, 0.7152, 0.0722)), 1e-4);
+                            float pointLuminance = SdfLuminance(pointRadiance);
 
-                            sourceRadiance += pointRadiance * pointShadow.combinedVisibility * pointPhase;
-                            weightedShadow += pointShadow.combinedVisibility * pointWeight;
-                            weightedGeometryShadow += pointShadow.geometryVisibility * pointWeight;
-                            weightedMediaShadow += pointShadow.mediaTransmittance * pointWeight;
-                            sourceWeight += pointWeight;
+                            if (pointLuminance * sigmaS * max(_VolumeLightIntensity, 0.0) > 1e-4)
+                            {
+                                SdfVolumeShadowSample pointShadow = EvaluateVolumeLightShadow(samplePositionOS, pointLightDirOS, pointDistanceOS);
+                                float pointWeight = max(pointLuminance, 1e-4);
+
+                                sourceRadiance += pointRadiance * pointShadow.combinedVisibility * pointPhase;
+                                weightedShadow += pointShadow.combinedVisibility * pointWeight;
+                                weightedGeometryShadow += pointShadow.geometryVisibility * pointWeight;
+                                weightedMediaShadow += pointShadow.mediaTransmittance * pointWeight;
+                                sourceWeight += pointWeight;
+                            }
                         }
                     }
 
-                    float segmentTransmittance = exp(-sigmaT * stepLengthWS);
+                    float currentStepLengthWS = currentStepLength * worldUnitsPerObjectUnit;
+                    float segmentTransmittance = exp(-sigmaT * currentStepLengthWS);
                     float3 sourceTerm = sourceRadiance * max(_VolumeLightIntensity, 0.0) * sigmaS + emissionRadiance;
                     float sourceIntegral = sigmaT > 1e-5
                         ? (1.0 - segmentTransmittance) / sigmaT
-                        : stepLengthWS;
+                        : currentStepLengthWS;
                     float3 integratedScatter = sourceTerm * sourceIntegral;
 
                     scatteredLight += transmittance * integratedScatter;
@@ -1441,11 +1493,16 @@ Shader "Custom/Sdf/Phase1Raymarch"
                     sigmaSPeak = max(sigmaSPeak, sigmaS);
                     sigmaTPeak = max(sigmaTPeak, sigmaT);
                     shapeMaskPeak = max(shapeMaskPeak, shapeMaskDebug);
-                    float inverseSourceWeight = 1.0 / max(sourceWeight, 1e-4);
-                    shadowAccumulation += weightedShadow * inverseSourceWeight;
-                    geometryShadowAccumulation += weightedGeometryShadow * inverseSourceWeight;
-                    mediaShadowAccumulation += weightedMediaShadow * inverseSourceWeight;
-                    contributingSamples += 1.0;
+                    if (sourceWeight > 0.0)
+                    {
+                        float inverseSourceWeight = 1.0 / max(sourceWeight, 1e-4);
+                        shadowAccumulation += weightedShadow * inverseSourceWeight;
+                        geometryShadowAccumulation += weightedGeometryShadow * inverseSourceWeight;
+                        mediaShadowAccumulation += weightedMediaShadow * inverseSourceWeight;
+                        contributingSamples += 1.0;
+                    }
+
+                    sampleT += currentStepLength;
 
                     if (transmittance < 0.01)
                     {
