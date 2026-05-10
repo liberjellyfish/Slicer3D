@@ -735,7 +735,7 @@ Light:
   serializedVersion: 11
   m_Type: 1
   m_Color: {r: 1, g: 0.72, b: 0.46, a: 1}
-  m_Intensity: 0.9
+  m_Intensity: 4
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -797,13 +797,13 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 91931936}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: -0.99687475, z: 0.078998506, w: 0}
+  m_LocalRotation: {x: 0, y: -0.9848078, z: 0.17364816, w: 0}
   m_LocalPosition: {x: -0.2, y: 19.9, z: 93.9}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 9.062, y: -180, z: 0}
+  m_LocalEulerAnglesHint: {x: 20, y: -180, z: 0}
 --- !u!114 &91931939
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4058,11 +4058,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: d6883fa33c269104c9c24d36f779e140, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -3.39
+      value: -3.93
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: d6883fa33c269104c9c24d36f779e140, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.4
+      value: -0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: d6883fa33c269104c9c24d36f779e140, type: 3}
       propertyPath: m_LocalPosition.z
@@ -9381,8 +9381,7 @@ MonoBehaviour:
   lightingValidationRig: {fileID: 91931940}
   backdropRenderer: {fileID: 1412337071}
   dustVisualizationRoot: {fileID: 0}
-  sdfDrivers:
-  - {fileID: 1680505283}
+  sdfDrivers: []
   sharedVolumeProxy: {fileID: 1917404106}
   validationCameras:
   - {fileID: 1109503984}
@@ -10705,7 +10704,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!65 &1680505279
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -10901,8 +10900,8 @@ MonoBehaviour:
   volumeColorTint: {r: 1, g: 0.78, b: 0.54, a: 1}
   debugView: 0
   syncEveryFrame: 1
-  sceneDataVersion: 6
-  materialPropertyUploadVersion: 13
+  sceneDataVersion: 9
+  materialPropertyUploadVersion: 20
   screenSpaceGlobalUploadVersion: 0
 --- !u!114 &1680505284
 MonoBehaviour:
@@ -10923,9 +10922,9 @@ MonoBehaviour:
   gizmoSize: 1.5
   gizmoColor: {r: 0.2, g: 0.9, b: 1, a: 0.85}
   uploadedPlaneCount: 0
-  bufferCapacity: 1
+  bufferCapacity: 0
   hasUploadedPlanes: 0
-  dataVersion: 5
+  dataVersion: 9
 --- !u!114 &1680505285
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12202,8 +12201,8 @@ Transform:
   m_GameObject: {fileID: 1917404101}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1.85, z: 32}
-  m_LocalScale: {x: 78, y: 5.6, z: 104}
+  m_LocalPosition: {x: 0, y: 7.2, z: 32}
+  m_LocalScale: {x: 78, y: 8, z: 104}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
@@ -12260,47 +12259,47 @@ MonoBehaviour:
   cutFaceFreshnessBoost: 0.3
   volumeLightEnabled: 1
   volumeContributionMode: 3
-  volumeLightIntensity: 2.25
-  volumeLightDensity: 0.72
-  volumeLightAnisotropy: 0.55
+  volumeLightIntensity: 2.4
+  volumeLightDensity: 0.9
+  volumeLightAnisotropy: 0.42
   volumeLightSamples: 14
   volumeLightMaxDistance: 1.8
   volumeLightMaxStepLength: 0.2
-  volumeLightShadowStrength: 0.58
+  volumeLightShadowStrength: 0.5
   volumeLightShadowBias: 0.01
   volumeLightSurfaceFadeDistance: 0.22
   volumeLightPlaneBand: 0.16
   volumeLightRemovedDepth: 0.28
   volumeLightShapeDepth: 0.24
-  volumeLightNoiseScale: 2.6
-  volumeLightNoiseStrength: 0.28
+  volumeLightNoiseScale: 4
+  volumeLightNoiseStrength: 0.08
   volumeLightNoiseDrift: 0.2
-  volumeBaseFogDensity: 0.008
-  volumeHeightFogStrength: 0.055
-  volumeCutFogBoost: 1.05
-  volumeNoiseContrast: 1.28
-  volumeAbsorptionDensity: 0.12
-  volumeDensityThreshold: 0.003
-  volumeAlphaClipThreshold: 0.0015
+  volumeBaseFogDensity: 0.024
+  volumeHeightFogStrength: 0.12
+  volumeCutFogBoost: 0.9
+  volumeNoiseContrast: 0.85
+  volumeAbsorptionDensity: 0.1
+  volumeDensityThreshold: 0
+  volumeAlphaClipThreshold: 0
   volumeEmissionIntensity: 0
   volumeEmissionColor: {r: 0, g: 0, b: 0, a: 1}
-  volumeFogShapeMode: 3
-  volumeFogShapeCenter: {x: 0, y: -0.08, z: -0.03}
-  volumeFogShapeExtents: {x: 0.86, y: 0.48, z: 0.86}
+  volumeFogShapeMode: 0
+  volumeFogShapeCenter: {x: 0, y: 0, z: 0}
+  volumeFogShapeExtents: {x: 0.5, y: 0.5, z: 0.5}
   volumeFogShapeRadius: 0.46
   volumeFogShapeHeight: 0.92
-  volumeFogShapeEdgeSoftness: 0.3
-  volumeFogShapeNoiseErosion: 0.58
-  volumeFogShapeNoiseScale: 1.35
-  volumeCloudCoverage: 0.54
-  volumeCloudSoftness: 0.28
-  volumeCloudDetailStrength: 0.36
-  volumeCloudDetailScale: 6.5
-  volumeCloudWarpStrength: 0.42
-  volumeCloudLobeCount: 14
-  volumeCloudLobeSpread: {x: 0.95, y: 0.42, z: 0.9}
-  volumeCloudLobeRadius: 0.38
-  volumeCloudDensityBoost: 0.58
+  volumeFogShapeEdgeSoftness: 0.34
+  volumeFogShapeNoiseErosion: 0
+  volumeFogShapeNoiseScale: 0.85
+  volumeCloudCoverage: 0.18
+  volumeCloudSoftness: 0.55
+  volumeCloudDetailStrength: 0
+  volumeCloudDetailScale: 3
+  volumeCloudWarpStrength: 0
+  volumeCloudLobeCount: 1
+  volumeCloudLobeSpread: {x: 0, y: 0, z: 0}
+  volumeCloudLobeRadius: 0.7
+  volumeCloudDensityBoost: 0
   volumeShadowSamples: 8
   volumeShadowMaxDistance: 1.8
   volumeSurfaceOcclusionStrength: 0.18
@@ -12310,13 +12309,13 @@ MonoBehaviour:
   volumePointLightColor: {r: 1, g: 0.76, b: 0.48, a: 1}
   volumePointLightIntensity: 16
   volumePointLightRange: 4.8
-  volumeExposure: 1.05
-  volumeColorTint: {r: 0.58, g: 0.7, b: 0.72, a: 1}
+  volumeExposure: 1.22
+  volumeColorTint: {r: 0.5, g: 0.74, b: 0.82, a: 1}
   debugView: 0
   syncEveryFrame: 1
-  sceneDataVersion: 5
-  materialPropertyUploadVersion: 64
-  screenSpaceGlobalUploadVersion: 52
+  sceneDataVersion: 8
+  materialPropertyUploadVersion: 77
+  screenSpaceGlobalUploadVersion: 971
 --- !u!114 &1917404106
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -12331,17 +12330,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   autoFindSurfaceDrivers: 0
   autoFindRefreshIntervalFrames: 30
-  surfaceDrivers:
-  - {fileID: 1680505283}
+  surfaceDrivers: []
   forceSurfaceDriversToSurfaceOnly: 1
   autoFitBounds: 0
   manualCenter: {x: 0, y: 1.85, z: 32}
-  manualSize: {x: 78, y: 5.6, z: 104}
+  manualSize: {x: 78, y: 8, z: 104}
   boundsPadding: 0.35
   minBoundsSize: 0.5
   useScreenSpaceVolume: 1
   hideProxyRendererInScreenSpace: 1
-  screenSpaceVisibilityMode: 0
+  screenSpaceVisibilityMode: 1
   sortingOrder: 100
   drawBoundsGizmo: 1
   boundsGizmoColor: {r: 1, g: 0.62, b: 0.25, a: 0.35}
@@ -12349,7 +12347,7 @@ MonoBehaviour:
   cutTileCullingCompute: {fileID: 7200000, guid: c3f6e8dab4a3578c9d5e7f102a3b4c6d, type: 3}
   maxCutIndicesPerTile: 64
   cutTilePaddingPixels: 2
-  currentSdfShapeCount: 1
+  currentSdfShapeCount: 0
   currentCutPlaneCount: 0
   currentVolumeSamples: 14
   currentShadowSamples: 8
@@ -12371,7 +12369,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1917404101}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 71e6b73105914f349a29f591b4bc8dd5, type: 3}
   m_Name: 
