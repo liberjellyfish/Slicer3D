@@ -9386,9 +9386,9 @@ MonoBehaviour:
   validationCameras:
   - {fileID: 1109503984}
   validationMode: 9
-  applyOnEnable: 1
-  applyOnValidate: 1
-  applyInEditMode: 1
+  applyOnEnable: 0
+  applyOnValidate: 0
+  applyInEditMode: 0
   normalAmbientIntensity: 0.32
   validationAmbientIntensity: 0.32
   useDarkValidationSky: 0
@@ -10900,8 +10900,8 @@ MonoBehaviour:
   volumeColorTint: {r: 1, g: 0.78, b: 0.54, a: 1}
   debugView: 0
   syncEveryFrame: 1
-  sceneDataVersion: 9
-  materialPropertyUploadVersion: 20
+  sceneDataVersion: 11
+  materialPropertyUploadVersion: 22
   screenSpaceGlobalUploadVersion: 0
 --- !u!114 &1680505284
 MonoBehaviour:
@@ -12201,7 +12201,7 @@ Transform:
   m_GameObject: {fileID: 1917404101}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 7.2, z: 32}
+  m_LocalPosition: {x: 0, y: 6.92, z: 32}
   m_LocalScale: {x: 78, y: 8, z: 104}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -12313,9 +12313,9 @@ MonoBehaviour:
   volumeColorTint: {r: 0.5, g: 0.74, b: 0.82, a: 1}
   debugView: 0
   syncEveryFrame: 1
-  sceneDataVersion: 8
-  materialPropertyUploadVersion: 77
-  screenSpaceGlobalUploadVersion: 971
+  sceneDataVersion: 10
+  materialPropertyUploadVersion: 81
+  screenSpaceGlobalUploadVersion: 1252
 --- !u!114 &1917404106
 MonoBehaviour:
   m_ObjectHideFlags: 0
