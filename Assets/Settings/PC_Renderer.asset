@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: de640fe3d0db1804a85f9fc8f5cadab6, type: 3}
   m_Name: PC_Renderer
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier:
   debugShaders:
     debugReplacementPS: {fileID: 4800000, guid: cf852408f2e174538bcd9b7fda1c5ae7, type: 3}
     hdrDebugViewPS: {fileID: 4800000, guid: 573620ae32aec764abd4d728906d2587, type: 3}
@@ -27,7 +27,8 @@ MonoBehaviour:
   m_RendererFeatures:
   - {fileID: 7833122117494664109}
   - {fileID: 6134829173567901142}
-  m_RendererFeatureMap: ad6b866f10d7b46cd6cd3730a14a2355
+  - {fileID: 7608457182034591123}
+  m_RendererFeatureMap: ad6b866f10d7b46cd6cd3730a14a235593fdf0e77eab9669
   m_UseNativeRenderPass: 1
   xrSystemData: {fileID: 0}
   postProcessData: {fileID: 11400000, guid: 41439944d30ece34e96484bdb6645b55, type: 2}
@@ -64,8 +65,8 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b00045f12942b46c698459096c89274e, type: 3}
   m_Name: SdfScreenSpaceVolume
-  m_EditorClassIdentifier: 
-  m_Active: 1
+  m_EditorClassIdentifier:
+  m_Active: 0
   injectionPoint: 550
   fetchColorBuffer: 1
   requirements: 1
@@ -73,6 +74,27 @@ MonoBehaviour:
   passIndex: 0
   bindDepthStencilAttachment: 0
   m_Version: 1
+--- !u!114 &7608457182034591123
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d4e8a7b6c5f1427bb9d6e3a019c2f458, type: 3}
+  m_Name: SdfHalfResVolume
+  m_EditorClassIdentifier:
+  m_Active: 1
+  renderPassEvent: 550
+  volumeMaterial: {fileID: 2100000, guid: 7c4778f42a3e4957b47b8f30f5adfba1, type: 2}
+  upsampleShader: {fileID: 4800000, guid: e8f2c41a9b7346ed9cc25a7d4019b8ef, type: 3}
+  downsample: 2
+  bilateralUpsample: 1
+  depthSensitivity: 0.025
+  deltaClamp: 8
+  includeSceneView: 1
 --- !u!114 &7833122117494664109
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -79,6 +79,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
             int _SdfCutTileGridWidth;
             int _SdfCutTileGridHeight;
             int _SdfCutTileMaxIndicesPerTile;
+            float4 _SdfCutTileScreenSize;
 
             #define SDF_CUT_TILE_SIZE 16
             #define SDF_CUT_TILE_OVERFLOW_BIT 0x80000000u
@@ -929,7 +930,10 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
                 float2 uv = input.texcoord.xy;
-                int sdfCutTileIndex = GetSdfCutTileIndex(uv * _ScreenParams.xy);
+                float2 cutTileScreenSize = _SdfCutTileScreenSize.x > 1.0 && _SdfCutTileScreenSize.y > 1.0
+                    ? _SdfCutTileScreenSize.xy
+                    : _ScreenParams.xy;
+                int sdfCutTileIndex = GetSdfCutTileIndex(uv * cutTileScreenSize);
                 float4 sourceColor = SAMPLE_TEXTURE2D_X_LOD(_BlitTexture, sampler_LinearClamp, uv, _BlitMipLevel);
                 bool wantsDebug = _DebugView > 0.5;
 
