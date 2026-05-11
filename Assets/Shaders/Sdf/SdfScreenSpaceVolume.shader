@@ -22,25 +22,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
             #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
-
-            struct CutPlaneData
-            {
-                float3 normal;
-                float distance;
-                float sideSign;
-                float3 padding;
-            };
-
-            struct SdfSceneShapeData
-            {
-                float4 worldToObjectRow0;
-                float4 worldToObjectRow1;
-                float4 worldToObjectRow2;
-                float4 sphereCenterRadius;
-                float4 boxExtentsShapeMode;
-                float4 baseCutPlane;
-                float4 cutRangeAndDistanceScale;
-            };
+            #include "Assets/Shaders/Sdf/SdfSceneData.hlsl"
 
             struct VolumeBands
             {
@@ -152,6 +134,9 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
             float4 _ProxyBoundsMax;
             float _DebugView;
 
+            #include "Assets/Shaders/Sdf/SdfCommon.hlsl"
+            #include "Assets/Shaders/Sdf/SdfVolumeMedium.hlsl"
+
             float3 VolumeToWorld(float3 p)
             {
                 return mul(_SdfVolumeLocalToWorld, float4(p, 1.0)).xyz;
@@ -170,68 +155,6 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
             float3 VolumeDirToWorld(float3 d)
             {
                 return mul((float3x3)_SdfVolumeLocalToWorld, d);
-            }
-
-            float SdSphere(float3 p, float3 center, float radius)
-            {
-                return length(p - center) - radius;
-            }
-
-            float SdBox(float3 p, float3 extents)
-            {
-                float3 q = abs(p) - extents;
-                return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
-            }
-
-            float SdPlane(float3 p, float3 normal, float offset)
-            {
-                return dot(p, normalize(normal)) + offset;
-            }
-
-            float SdClippedBoxForData(float3 p, float3 extents, float3 planeNormal, float planeOffset)
-            {
-                return max(SdBox(p, extents), SdPlane(p, planeNormal, planeOffset));
-            }
-
-            float BaseShapeMapForData(float3 p, float3 sphereCenter, float sphereRadius, float3 boxExtents, float4 baseCutPlane, float shapeMode)
-            {
-                float sphereDistance = SdSphere(p, sphereCenter, sphereRadius);
-                float clippedBoxDistance = SdClippedBoxForData(p, boxExtents, baseCutPlane.xyz, baseCutPlane.w);
-                int mode = (int)round(shapeMode);
-                if (mode == 0) return sphereDistance;
-                if (mode == 1) return clippedBoxDistance;
-                return min(sphereDistance, clippedBoxDistance);
-            }
-
-            int GetSdfCutTileIndex(float2 pixelPosition)
-            {
-                if (_SdfCutTileEnabled <= 0 || _SdfCutTileGridWidth <= 0 || _SdfCutTileGridHeight <= 0)
-                {
-                    return -1;
-                }
-
-                int2 tileCoord = int2(floor(pixelPosition / SDF_CUT_TILE_SIZE));
-                if (tileCoord.x < 0 || tileCoord.y < 0 || tileCoord.x >= _SdfCutTileGridWidth || tileCoord.y >= _SdfCutTileGridHeight)
-                {
-                    return -1;
-                }
-
-                return tileCoord.y * _SdfCutTileGridWidth + tileCoord.x;
-            }
-
-            bool TryGetSdfCutTileRange(int tileIndex, out uint offset, out uint count)
-            {
-                offset = 0u;
-                count = 0u;
-                if (tileIndex < 0 || _SdfCutTileEnabled <= 0)
-                {
-                    return false;
-                }
-
-                uint2 range = _SdfCutTileRanges[tileIndex];
-                offset = range.x;
-                count = range.y & 0x7fffffffu;
-                return (range.y & SDF_CUT_TILE_OVERFLOW_BIT) == 0u;
             }
 
             float ApplySceneCutPlanes(float3 p, float baseDistance, int cutStart, int cutCount, int tileIndex)
@@ -405,167 +328,9 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 return bands;
             }
 
-            bool IntersectProxyBounds(float3 rayOrigin, float3 rayDir, out float tEnter, out float tExit)
-            {
-                float3 invDir = rcp(rayDir);
-                float3 t0 = (_ProxyBoundsMin.xyz - rayOrigin) * invDir;
-                float3 t1 = (_ProxyBoundsMax.xyz - rayOrigin) * invDir;
-                float3 tMin = min(t0, t1);
-                float3 tMax = max(t0, t1);
-                tEnter = max(max(tMin.x, tMin.y), tMin.z);
-                tExit = min(min(tMax.x, tMax.y), tMax.z);
-                return tExit >= max(tEnter, 0.0);
-            }
-
             float ObjectRayUnitToWorldLength(float3 rayOrigin, float3 rayDir)
             {
                 return max(length(VolumeToWorld(rayOrigin + rayDir) - VolumeToWorld(rayOrigin)), 1e-4);
-            }
-
-            float Hash13(float3 p)
-            {
-                p = frac(p * 0.1031);
-                p += dot(p, p.zyx + 31.32);
-                return frac((p.x + p.y) * p.z);
-            }
-
-            float ValueNoise3D(float3 p)
-            {
-                float3 i = floor(p);
-                float3 f = frac(p);
-                float3 u = f * f * (3.0 - 2.0 * f);
-                float n000 = Hash13(i);
-                float n100 = Hash13(i + float3(1.0, 0.0, 0.0));
-                float n010 = Hash13(i + float3(0.0, 1.0, 0.0));
-                float n110 = Hash13(i + float3(1.0, 1.0, 0.0));
-                float n001 = Hash13(i + float3(0.0, 0.0, 1.0));
-                float n101 = Hash13(i + float3(1.0, 0.0, 1.0));
-                float n011 = Hash13(i + float3(0.0, 1.0, 1.0));
-                float n111 = Hash13(i + float3(1.0, 1.0, 1.0));
-                float nx00 = lerp(n000, n100, u.x);
-                float nx10 = lerp(n010, n110, u.x);
-                float nx01 = lerp(n001, n101, u.x);
-                float nx11 = lerp(n011, n111, u.x);
-                return lerp(lerp(nx00, nx10, u.y), lerp(nx01, nx11, u.y), u.z);
-            }
-
-            float Fbm3D(float3 p)
-            {
-                float value = 0.0;
-                float amplitude = 0.5;
-                float frequency = 1.0;
-                value += ValueNoise3D(p * frequency) * amplitude;
-                frequency *= 2.03;
-                amplitude *= 0.5;
-                value += ValueNoise3D(p * frequency + 17.13) * amplitude;
-                frequency *= 2.11;
-                amplitude *= 0.5;
-                value += ValueNoise3D(p * frequency + 41.71) * amplitude;
-                frequency *= 2.07;
-                amplitude *= 0.5;
-                value += ValueNoise3D(p * frequency + 83.19) * amplitude;
-                return saturate(value / 0.9375);
-            }
-
-            float EvaluateCloudLobeMask(float3 localP, float3 extents)
-            {
-                float3 normalizedP = localP / max(extents, float3(1e-4, 1e-4, 1e-4));
-                float3 spread = max(_VolumeCloudLobeSpread.xyz, float3(0.0, 0.0, 0.0));
-                float baseRadius = max(_VolumeCloudLobeRadius, 0.05);
-                int lobeCount = min(max((int)round(_VolumeCloudLobeCount), 1), 24);
-                float lobeMask = 0.0;
-
-                [loop]
-                for (int lobeIndex = 0; lobeIndex < 24; lobeIndex++)
-                {
-                    if (lobeIndex >= lobeCount) break;
-                    float index = (float)lobeIndex;
-                    float3 seed = float3(index * 19.17 + 3.11, index * 41.73 + 7.61, index * 73.31 + 13.97);
-                    float3 center = float3(ValueNoise3D(seed + 11.3), ValueNoise3D(seed + 29.7), ValueNoise3D(seed + 53.1)) * 2.0 - 1.0;
-                    center *= spread;
-                    center.y *= 0.75;
-                    float radius = baseRadius * lerp(0.68, 1.28, ValueNoise3D(seed + 91.4));
-                    float3 lobeDelta = (normalizedP - center) / max(radius, 1e-4);
-                    lobeMask = max(lobeMask, 1.0 - smoothstep(0.55, 1.18, length(lobeDelta)));
-                }
-
-                return saturate(lobeMask);
-            }
-
-            float EvaluateProxyBoundaryFade(float3 p)
-            {
-                float3 distanceToMin = p - _ProxyBoundsMin.xyz;
-                float3 distanceToMax = _ProxyBoundsMax.xyz - p;
-                float minDistance = min(min(distanceToMin.x, distanceToMin.y), distanceToMin.z);
-                float maxDistance = min(min(distanceToMax.x, distanceToMax.y), distanceToMax.z);
-                float boundaryDistance = min(minDistance, maxDistance);
-                return smoothstep(0.0, max(_VolumeLightSurfaceFadeDistance, _HitEpsilon), boundaryDistance);
-            }
-
-            float SdVolumeEllipsoid(float3 p, float3 extents)
-            {
-                float3 safeExtents = max(extents, float3(1e-4, 1e-4, 1e-4));
-                float3 q = p / safeExtents;
-                float minExtent = min(safeExtents.x, min(safeExtents.y, safeExtents.z));
-                return (length(q) - 1.0) * minExtent;
-            }
-
-            float SdVolumeCapsuleY(float3 p, float radius, float height)
-            {
-                float safeRadius = max(radius, 1e-4);
-                float halfSegment = max(height * 0.5 - safeRadius, 0.0);
-                p.y -= clamp(p.y, -halfSegment, halfSegment);
-                return length(p) - safeRadius;
-            }
-
-            float EvaluateVolumeFogShapeMask(float3 p)
-            {
-                int mode = (int)round(_VolumeFogShapeMode);
-                if (mode <= 0)
-                {
-                    return 1.0;
-                }
-
-                float3 localP = p - _VolumeFogShapeCenter.xyz;
-                float3 extents = max(_VolumeFogShapeExtents.xyz, float3(0.01, 0.01, 0.01));
-                float signedDistance = mode == 2
-                    ? SdVolumeCapsuleY(localP, _VolumeFogShapeRadius, _VolumeFogShapeHeight)
-                    : SdVolumeEllipsoid(localP, extents);
-
-                if (mode == 3)
-                {
-                    float edgeSoftness = max(_VolumeFogShapeEdgeSoftness, _HitEpsilon);
-                    float baseShapeMask = 1.0 - smoothstep(0.0, edgeSoftness, signedDistance);
-                    float lobeMask = EvaluateCloudLobeMask(localP, extents);
-                    float height01 = saturate(localP.y / max(extents.y, 1e-4) * 0.5 + 0.5);
-                    float heightFade = smoothstep(0.02, 0.18, height01) * (1.0 - smoothstep(0.82, 0.98, height01));
-                    float3 drift = float3(0.29, 0.47, 0.61) * (_Time.y * _VolumeLightNoiseDrift);
-                    float baseScale = max(_VolumeFogShapeNoiseScale, 0.1);
-                    float maxExtent = max(extents.x, max(extents.y, extents.z));
-                    float3 warpSeed = localP * baseScale + drift;
-                    float3 warp = float3(ValueNoise3D(warpSeed + 13.1), ValueNoise3D(warpSeed + 37.7), ValueNoise3D(warpSeed + 71.3)) * 2.0 - 1.0;
-                    float3 cloudP = (localP + warp * maxExtent * 0.2 * saturate(_VolumeCloudWarpStrength / 1.5)) * baseScale + drift;
-                    float lowFrequency = Fbm3D(cloudP);
-                    float detail = Fbm3D(localP * max(_VolumeCloudDetailScale, 0.1) + drift * 1.7);
-                    float coverageThreshold = lerp(0.78, 0.28, saturate(_VolumeCloudCoverage));
-                    float cloudMask = smoothstep(coverageThreshold - max(_VolumeCloudSoftness, 0.01), coverageThreshold + max(_VolumeCloudSoftness, 0.01), lowFrequency);
-                    float detailErosion = smoothstep(0.42, 0.92, detail) * saturate(_VolumeCloudDetailStrength);
-                    float edgeWeight = 1.0 - smoothstep(-edgeSoftness * 2.5, -edgeSoftness * 0.25, signedDistance);
-                    cloudMask *= 1.0 - detailErosion * lerp(0.35, 0.85, edgeWeight);
-                    float cloudInfluence = saturate(0.45 + saturate(_VolumeFogShapeNoiseErosion) * 0.75);
-                    float lobeBody = saturate(max(lobeMask, baseShapeMask * 0.25));
-                    return saturate(lerp(baseShapeMask, lobeBody * cloudMask, cloudInfluence) * heightFade);
-                }
-
-                float erosion = saturate(_VolumeFogShapeNoiseErosion);
-                if (erosion > 0.0)
-                {
-                    float3 noiseP = localP * max(_VolumeFogShapeNoiseScale, 0.1);
-                    noiseP += float3(0.29, 0.47, 0.61) * (_Time.y * _VolumeLightNoiseDrift);
-                    signedDistance += (ValueNoise3D(noiseP) * 2.0 - 1.0) * max(_VolumeFogShapeEdgeSoftness, _HitEpsilon) * erosion * 1.75;
-                }
-
-                return 1.0 - smoothstep(0.0, max(_VolumeFogShapeEdgeSoftness, _HitEpsilon), signedDistance);
             }
 
             void GetParticipatingMedia(float3 samplePosition, out float sigmaA, out float sigmaS, out float sigmaT, out float3 emissionRadiance, out float shapeMaskDebug, out float densityDebug, int tileIndex)
@@ -582,10 +347,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 float heightFog = pow(1.0 - height01, 1.6) * _VolumeHeightFogStrength;
                 float localVolumeMask = saturate(max(shapeBand * 1.15, cutBand));
 
-                float3 noisePosition = samplePosition * _VolumeLightNoiseScale + float3(0.37, 0.19, 0.53) * (_Time.y * _VolumeLightNoiseDrift);
-                float contrastPivot = saturate((ValueNoise3D(noisePosition) - 0.5) * _VolumeNoiseContrast + 0.5);
-                float contrastNoise = smoothstep(0.2, 0.95, contrastPivot);
-                float noiseMask = lerp(1.0, 0.45 + contrastNoise * 0.95, saturate(_VolumeLightNoiseStrength));
+                float noiseMask = SdfEvaluateVolumeNoiseMask(samplePosition);
 
                 float cloudCore = smoothstep(0.16, 0.82, volumeShapeMask);
                 cloudCore *= cloudCore;
@@ -598,49 +360,10 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 float movingDensity = (baseFog + supportedHeightFog * localVolumeMask + supportedShapeBand * 0.06 + cloudBodyDensity + cutDensity) * noiseMask * boundaryFade;
                 movingDensity = movingDensity > max(_VolumeDensityThreshold, 0.0) ? movingDensity : 0.0;
 
-                float density = movingDensity;
-                if (_VolumeAmbientMistEnabled > 0.5)
-                {
-                    float maxMovingDensity = max(_VolumeMovingFogMaxDensity, 1e-4);
-                    float compressedMovingDensity = maxMovingDensity * (1.0 - exp(-movingDensity / maxMovingDensity));
-                    movingDensity = lerp(movingDensity, compressedMovingDensity, saturate(_VolumeMovingFogCompression));
-
-                    float heightFalloff = lerp(1.0, pow(1.0 - height01, 1.25), saturate(_VolumeAmbientMistHeightFalloff));
-                    float ambientMist = max(_VolumeAmbientMistDensity, 0.0) * heightFalloff * boundaryFade;
-                    density = ambientMist + movingDensity;
-                }
+                float density = SdfApplyAmbientMistAndMovingFogCompression(movingDensity, height01, boundaryFade);
                 densityDebug = saturate(density);
 
-                sigmaA = max(0.0, density * _VolumeAbsorptionDensity);
-                sigmaS = max(0.0, density * _VolumeLightDensity);
-                sigmaT = max(0.0, sigmaA + sigmaS);
-                emissionRadiance = density * max(_VolumeEmissionIntensity, 0.0) * _VolumeEmissionColor.rgb;
-            }
-
-            float SdfLuminance(float3 color)
-            {
-                return dot(color, float3(0.2126, 0.7152, 0.0722));
-            }
-
-            float EvaluateEmptyVolumeStepScale(float sigmaT, float densityDebug, float shapeMaskDebug)
-            {
-                float mediumPresence = max(saturate(densityDebug * 8.0), saturate(shapeMaskDebug));
-                float emptyScale = lerp(2.0, 1.0, smoothstep(0.02, 0.28, mediumPresence));
-                return sigmaT <= 1e-5 ? emptyScale : 1.0;
-            }
-
-            bool HasVolumeSampleContribution(float sigmaT, float3 emissionRadiance)
-            {
-                return sigmaT > 1e-5 || SdfLuminance(emissionRadiance) > 1e-5;
-            }
-
-            float EvaluateScatteringPhase(float3 lightDirWS, float3 viewDirWS)
-            {
-                float g = clamp(_VolumeLightAnisotropy, -0.8, 0.8);
-                float g2 = g * g;
-                float cosTheta = clamp(dot(-lightDirWS, viewDirWS), -1.0, 1.0);
-                float denom = pow(max(1.0 + g2 - 2.0 * g * cosTheta, 1e-3), 1.5);
-                return (1.0 - g2) / (12.56637061 * denom);
+                SdfDensityToParticipatingMedia(density, sigmaA, sigmaS, sigmaT, emissionRadiance);
             }
 
             float TraceVolumeGeometryVisibility(float3 shadowOrigin, float3 lightDir, float maxShadowDistance)
@@ -919,12 +642,6 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 terms.mediaShadowDebug = contributingSamples > 0.0 ? saturate(mediaShadowAccumulation / contributingSamples) : 1.0;
                 terms.scatteringVisibility = saturate(scatteringVisibilityAccumulation * max(_VolumeExposure, 0.0));
                 return terms;
-            }
-
-            float3 ApplyVolumeDisplayMapping(float3 color)
-            {
-                color = max(color, 0.0) * max(_VolumeExposure, 0.0);
-                return color / (1.0 + color);
             }
 
             float3 EvaluateDebugView(VolumeTerms terms)
