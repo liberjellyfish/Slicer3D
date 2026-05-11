@@ -316,6 +316,8 @@ public class SdfSharedVolumeProxy : MonoBehaviour
 
     private bool ApplyBounds(bool force)
     {
+        SyncManualBoundsFromTransformInEditMode();
+
         Bounds volumeBounds;
         if (autoFitBounds && SdfSceneDriverUtility.TryGetCombinedBounds(surfaceDrivers, out Bounds surfaceBounds))
         {
@@ -339,6 +341,17 @@ public class SdfSharedVolumeProxy : MonoBehaviour
         transform.localScale = safeSize;
         lastBoundsHash = boundsHash;
         return true;
+    }
+
+    private void SyncManualBoundsFromTransformInEditMode()
+    {
+        if (Application.isPlaying || autoFitBounds)
+        {
+            return;
+        }
+
+        manualCenter = transform.position;
+        manualSize = MaxComponents(transform.localScale, Vector3.one * minBoundsSize);
     }
 
     private void UploadSceneSdfData()

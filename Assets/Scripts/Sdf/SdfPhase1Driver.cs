@@ -345,6 +345,28 @@ public class SdfPhase1Driver : MonoBehaviour
         ApplyProperties();
     }
 
+    public void ConfigureShapeSettings(
+        ShapeMode mode,
+        Vector3 sphereCenter,
+        float sphereRadius,
+        Vector3 boxExtents,
+        Vector3 baseCutPlaneNormal,
+        float baseCutPlaneOffset)
+    {
+        shapeMode = mode;
+        this.sphereCenter = sphereCenter;
+        this.sphereRadius = Mathf.Max(0.01f, sphereRadius);
+        this.boxExtents = new Vector3(
+            Mathf.Max(0.01f, boxExtents.x),
+            Mathf.Max(0.01f, boxExtents.y),
+            Mathf.Max(0.01f, boxExtents.z));
+        cutPlaneNormal = baseCutPlaneNormal.sqrMagnitude > 1e-6f ? baseCutPlaneNormal.normalized : Vector3.up;
+        cutPlaneOffset = baseCutPlaneOffset;
+        CacheComponents();
+        RefreshSceneDataVersion();
+        ApplyProperties();
+    }
+
     public void SetVolumeContributionMode(VolumeContributionMode mode)
     {
         if (volumeContributionMode == mode)
