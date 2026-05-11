@@ -137,6 +137,13 @@ public class SdfPhase1Driver : MonoBehaviour
     [SerializeField] [Range(0.0f, 4.0f)] private float volumeEmissionIntensity = 0.0f;
     [SerializeField] private Color volumeEmissionColor = Color.black;
 
+    [Header("Volume Ambient Mist")]
+    [SerializeField] private bool volumeAmbientMistEnabled = false;
+    [SerializeField] [Range(0.0f, 0.04f)] private float volumeAmbientMistDensity = 0.0f;
+    [SerializeField] [Range(0.0f, 1.0f)] private float volumeAmbientMistHeightFalloff = 0.35f;
+    [SerializeField] [Range(0.02f, 2.0f)] private float volumeMovingFogMaxDensity = 0.45f;
+    [SerializeField] [Range(0.0f, 1.0f)] private float volumeMovingFogCompression = 0.0f;
+
     [Header("Volume Shape")]
     [SerializeField] private VolumeFogShapeMode volumeFogShapeMode = VolumeFogShapeMode.NoiseErodedEllipsoid;
     [SerializeField] private Vector3 volumeFogShapeCenter = Vector3.zero;
@@ -238,6 +245,11 @@ public class SdfPhase1Driver : MonoBehaviour
     private static readonly int VolumeAlphaClipThresholdId = Shader.PropertyToID("_VolumeAlphaClipThreshold");
     private static readonly int VolumeEmissionIntensityId = Shader.PropertyToID("_VolumeEmissionIntensity");
     private static readonly int VolumeEmissionColorId = Shader.PropertyToID("_VolumeEmissionColor");
+    private static readonly int VolumeAmbientMistEnabledId = Shader.PropertyToID("_VolumeAmbientMistEnabled");
+    private static readonly int VolumeAmbientMistDensityId = Shader.PropertyToID("_VolumeAmbientMistDensity");
+    private static readonly int VolumeAmbientMistHeightFalloffId = Shader.PropertyToID("_VolumeAmbientMistHeightFalloff");
+    private static readonly int VolumeMovingFogMaxDensityId = Shader.PropertyToID("_VolumeMovingFogMaxDensity");
+    private static readonly int VolumeMovingFogCompressionId = Shader.PropertyToID("_VolumeMovingFogCompression");
     private static readonly int VolumeFogShapeModeId = Shader.PropertyToID("_VolumeFogShapeMode");
     private static readonly int VolumeFogShapeCenterId = Shader.PropertyToID("_VolumeFogShapeCenter");
     private static readonly int VolumeFogShapeExtentsId = Shader.PropertyToID("_VolumeFogShapeExtents");
@@ -452,6 +464,22 @@ public class SdfPhase1Driver : MonoBehaviour
         ApplyProperties();
     }
 
+    public void SetVolumeAmbientMistSettings(
+        bool enabled,
+        float ambientMistDensity,
+        float ambientMistHeightFalloff,
+        float movingFogMaxDensity,
+        float movingFogCompression)
+    {
+        volumeAmbientMistEnabled = enabled;
+        volumeAmbientMistDensity = Mathf.Clamp(ambientMistDensity, 0.0f, 0.04f);
+        volumeAmbientMistHeightFalloff = Mathf.Clamp01(ambientMistHeightFalloff);
+        volumeMovingFogMaxDensity = Mathf.Clamp(movingFogMaxDensity, 0.02f, 2.0f);
+        volumeMovingFogCompression = Mathf.Clamp01(movingFogCompression);
+        CacheComponents();
+        ApplyProperties();
+    }
+
     public void SetVolumeVisibilitySettings(float densityThreshold, float alphaClipThreshold)
     {
         volumeDensityThreshold = Mathf.Clamp(densityThreshold, 0.0f, 0.2f);
@@ -518,6 +546,11 @@ public class SdfPhase1Driver : MonoBehaviour
         Shader.SetGlobalFloat(VolumeAlphaClipThresholdId, volumeAlphaClipThreshold);
         Shader.SetGlobalFloat(VolumeEmissionIntensityId, volumeEmissionIntensity);
         Shader.SetGlobalColor(VolumeEmissionColorId, volumeEmissionColor);
+        Shader.SetGlobalFloat(VolumeAmbientMistEnabledId, volumeAmbientMistEnabled ? 1.0f : 0.0f);
+        Shader.SetGlobalFloat(VolumeAmbientMistDensityId, volumeAmbientMistDensity);
+        Shader.SetGlobalFloat(VolumeAmbientMistHeightFalloffId, volumeAmbientMistHeightFalloff);
+        Shader.SetGlobalFloat(VolumeMovingFogMaxDensityId, volumeMovingFogMaxDensity);
+        Shader.SetGlobalFloat(VolumeMovingFogCompressionId, volumeMovingFogCompression);
         Shader.SetGlobalFloat(VolumeFogShapeModeId, (float)volumeFogShapeMode);
         Shader.SetGlobalVector(VolumeFogShapeCenterId, volumeFogShapeCenter);
         Shader.SetGlobalVector(VolumeFogShapeExtentsId, safeVolumeFogShapeExtents);
@@ -924,6 +957,11 @@ public class SdfPhase1Driver : MonoBehaviour
             hash = hash * 31 + volumeAlphaClipThreshold.GetHashCode();
             hash = hash * 31 + volumeEmissionIntensity.GetHashCode();
             AppendHash(ref hash, volumeEmissionColor);
+            hash = hash * 31 + (volumeAmbientMistEnabled ? 1 : 0);
+            hash = hash * 31 + volumeAmbientMistDensity.GetHashCode();
+            hash = hash * 31 + volumeAmbientMistHeightFalloff.GetHashCode();
+            hash = hash * 31 + volumeMovingFogMaxDensity.GetHashCode();
+            hash = hash * 31 + volumeMovingFogCompression.GetHashCode();
             hash = hash * 31 + (int)volumeFogShapeMode;
             AppendHash(ref hash, volumeFogShapeCenter);
             AppendHash(ref hash, safeVolumeFogShapeExtents);
@@ -1087,6 +1125,11 @@ public class SdfPhase1Driver : MonoBehaviour
         propertyBlock.SetFloat(VolumeAlphaClipThresholdId, volumeAlphaClipThreshold);
         propertyBlock.SetFloat(VolumeEmissionIntensityId, volumeEmissionIntensity);
         propertyBlock.SetColor(VolumeEmissionColorId, volumeEmissionColor);
+        propertyBlock.SetFloat(VolumeAmbientMistEnabledId, volumeAmbientMistEnabled ? 1.0f : 0.0f);
+        propertyBlock.SetFloat(VolumeAmbientMistDensityId, volumeAmbientMistDensity);
+        propertyBlock.SetFloat(VolumeAmbientMistHeightFalloffId, volumeAmbientMistHeightFalloff);
+        propertyBlock.SetFloat(VolumeMovingFogMaxDensityId, volumeMovingFogMaxDensity);
+        propertyBlock.SetFloat(VolumeMovingFogCompressionId, volumeMovingFogCompression);
         propertyBlock.SetFloat(VolumeFogShapeModeId, (float)volumeFogShapeMode);
         propertyBlock.SetVector(VolumeFogShapeCenterId, volumeFogShapeCenter);
         propertyBlock.SetVector(VolumeFogShapeExtentsId, safeVolumeFogShapeExtents);

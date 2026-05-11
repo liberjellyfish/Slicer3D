@@ -115,6 +115,11 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
             float _VolumeAlphaClipThreshold;
             float _VolumeEmissionIntensity;
             float4 _VolumeEmissionColor;
+            float _VolumeAmbientMistEnabled;
+            float _VolumeAmbientMistDensity;
+            float _VolumeAmbientMistHeightFalloff;
+            float _VolumeMovingFogMaxDensity;
+            float _VolumeMovingFogCompression;
             float _VolumeFogShapeMode;
             float4 _VolumeFogShapeCenter;
             float4 _VolumeFogShapeExtents;
@@ -590,8 +595,20 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                 float supportedShapeBand = shapeBand * cloudCore;
                 float cloudBodyDensity = cloudCore * max(_VolumeCloudDensityBoost, 0.0);
                 float cutDensity = cutCore * _VolumeCutFogBoost;
-                float density = (baseFog + supportedHeightFog * localVolumeMask + supportedShapeBand * 0.06 + cloudBodyDensity + cutDensity) * noiseMask * boundaryFade;
-                density = density > max(_VolumeDensityThreshold, 0.0) ? density : 0.0;
+                float movingDensity = (baseFog + supportedHeightFog * localVolumeMask + supportedShapeBand * 0.06 + cloudBodyDensity + cutDensity) * noiseMask * boundaryFade;
+                movingDensity = movingDensity > max(_VolumeDensityThreshold, 0.0) ? movingDensity : 0.0;
+
+                float density = movingDensity;
+                if (_VolumeAmbientMistEnabled > 0.5)
+                {
+                    float maxMovingDensity = max(_VolumeMovingFogMaxDensity, 1e-4);
+                    float compressedMovingDensity = maxMovingDensity * (1.0 - exp(-movingDensity / maxMovingDensity));
+                    movingDensity = lerp(movingDensity, compressedMovingDensity, saturate(_VolumeMovingFogCompression));
+
+                    float heightFalloff = lerp(1.0, pow(1.0 - height01, 1.25), saturate(_VolumeAmbientMistHeightFalloff));
+                    float ambientMist = max(_VolumeAmbientMistDensity, 0.0) * heightFalloff * boundaryFade;
+                    density = ambientMist + movingDensity;
+                }
                 densityDebug = saturate(density);
 
                 sigmaA = max(0.0, density * _VolumeAbsorptionDensity);

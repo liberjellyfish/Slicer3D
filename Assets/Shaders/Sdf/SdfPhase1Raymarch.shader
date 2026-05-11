@@ -68,6 +68,11 @@ Shader "Custom/Sdf/Phase1Raymarch"
         _VolumeAlphaClipThreshold ("Volume Alpha Clip Threshold", Range(0.0, 0.05)) = 0.006
         _VolumeEmissionIntensity ("Volume Emission Intensity", Range(0.0, 4.0)) = 0.0
         _VolumeEmissionColor ("Volume Emission Color", Color) = (0.0, 0.0, 0.0, 1.0)
+        _VolumeAmbientMistEnabled ("Volume Ambient Mist Enabled", Range(0.0, 1.0)) = 0.0
+        _VolumeAmbientMistDensity ("Volume Ambient Mist Density", Range(0.0, 0.04)) = 0.0
+        _VolumeAmbientMistHeightFalloff ("Volume Ambient Mist Height Falloff", Range(0.0, 1.0)) = 0.35
+        _VolumeMovingFogMaxDensity ("Volume Moving Fog Max Density", Range(0.02, 2.0)) = 0.45
+        _VolumeMovingFogCompression ("Volume Moving Fog Compression", Range(0.0, 1.0)) = 0.0
         _VolumeFogShapeMode ("Volume Fog Shape Mode (0 Box / 1 Ellipsoid / 2 CapsuleY / 3 Cloud)", Range(0, 3)) = 3
         _VolumeFogShapeCenter ("Volume Fog Shape Center", Vector) = (0.0, 0.0, 0.0, 0.0)
         _VolumeFogShapeExtents ("Volume Fog Shape Extents", Vector) = (0.48, 0.42, 0.48, 0.0)
@@ -283,6 +288,11 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float _VolumeAlphaClipThreshold;
                 float _VolumeEmissionIntensity;
                 float4 _VolumeEmissionColor;
+                float _VolumeAmbientMistEnabled;
+                float _VolumeAmbientMistDensity;
+                float _VolumeAmbientMistHeightFalloff;
+                float _VolumeMovingFogMaxDensity;
+                float _VolumeMovingFogCompression;
                 float _VolumeFogShapeMode;
                 float4 _VolumeFogShapeCenter;
                 float4 _VolumeFogShapeExtents;
@@ -1216,8 +1226,20 @@ Shader "Custom/Sdf/Phase1Raymarch"
                 float supportedHeightFog = heightFog * mediumSupport;
                 float supportedShapeBand = shapeBand * volumeShapeMask;
                 float cloudBodyDensity = volumeShapeMask * max(_VolumeCloudDensityBoost, 0.0);
-                float density = (baseFog + supportedHeightFog * localVolumeMask + supportedShapeBand * 0.16 + cloudBodyDensity + cutBand * _VolumeCutFogBoost) * noiseMask * boundaryFade;
-                density = density > max(_VolumeDensityThreshold, 0.0) ? density : 0.0;
+                float movingDensity = (baseFog + supportedHeightFog * localVolumeMask + supportedShapeBand * 0.16 + cloudBodyDensity + cutBand * _VolumeCutFogBoost) * noiseMask * boundaryFade;
+                movingDensity = movingDensity > max(_VolumeDensityThreshold, 0.0) ? movingDensity : 0.0;
+
+                float density = movingDensity;
+                if (_VolumeAmbientMistEnabled > 0.5)
+                {
+                    float maxMovingDensity = max(_VolumeMovingFogMaxDensity, 1e-4);
+                    float compressedMovingDensity = maxMovingDensity * (1.0 - exp(-movingDensity / maxMovingDensity));
+                    movingDensity = lerp(movingDensity, compressedMovingDensity, saturate(_VolumeMovingFogCompression));
+
+                    float heightFalloff = lerp(1.0, pow(1.0 - height01, 1.25), saturate(_VolumeAmbientMistHeightFalloff));
+                    float ambientMist = max(_VolumeAmbientMistDensity, 0.0) * heightFalloff * boundaryFade;
+                    density = ambientMist + movingDensity;
+                }
                 densityDebug = saturate(density);
 
                 sigmaA = max(0.0, density * _VolumeAbsorptionDensity);
