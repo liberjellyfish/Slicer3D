@@ -76,6 +76,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
             float _VolumeLightDensity;
             float _VolumeLightAnisotropy;
             float _VolumeLightSamples;
+            float _VolumeSampleJitterStrength;
             float _VolumeLightMaxStepLength;
             float _VolumeLightShadowStrength;
             float _VolumeLightShadowBias;
@@ -121,6 +122,8 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
             float _VolumeCloudDensityBoost;
             float _VolumeShadowSamples;
             float _VolumeShadowMaxDistance;
+            float _VolumeGeometryShadowSharpness;
+            float _VolumeGeometryShadowMinStepScale;
             float _VolumePointLightEnabled;
             float4 _VolumePointLightPositionWS;
             float4 _VolumePointLightColor;
@@ -200,6 +203,7 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
 
                 float3 volumeReferenceWS = VolumeToWorld(rayOrigin + rayDir * segmentStart);
                 Light mainLight = GetMainLight(TransformWorldToShadowCoord(volumeReferenceWS));
+                float volumeSampleJitter = SdfStableVolumeSampleJitter(uv * _ScreenParams.xy);
                 VolumeTerms terms = EvaluateVolumeLighting(
                     rayOrigin,
                     rayDir,
@@ -208,7 +212,8 @@ Shader "Hidden/Sdf/ScreenSpaceVolume"
                     segmentEnd,
                     normalize(mainLight.direction),
                     mainLight.color,
-                    sdfCutTileIndex);
+                    sdfCutTileIndex,
+                    volumeSampleJitter);
 
                 float3 debugColor = EvaluateDebugView(terms);
                 if (debugColor.x >= 0.0)

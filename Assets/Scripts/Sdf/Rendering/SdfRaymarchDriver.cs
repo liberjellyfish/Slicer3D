@@ -114,6 +114,7 @@ public class SdfRaymarchDriver : MonoBehaviour
     [SerializeField] [Range(0.0f, 8.0f)] private float volumeLightDensity = 0.8f;
     [SerializeField] [Range(-0.8f, 0.8f)] private float volumeLightAnisotropy = 0.15f;
     [SerializeField] [Range(4, 32)] private int volumeLightSamples = 20;
+    [SerializeField] [Range(0.0f, 1.0f)] private float volumeSampleJitterStrength = 0.85f;
     [SerializeField] [Min(0.05f)] private float volumeLightMaxDistance = 1.2f;
     [SerializeField] [Min(0.005f)] private float volumeLightMaxStepLength = 0.06f;
     [SerializeField] [Range(0.0f, 1.0f)] private float volumeLightShadowStrength = 0.75f;
@@ -166,6 +167,8 @@ public class SdfRaymarchDriver : MonoBehaviour
     [Header("Volume Shadow")]
     [SerializeField] [Range(4, 64)] private int volumeShadowSamples = 16;
     [SerializeField] [Min(0.05f)] private float volumeShadowMaxDistance = 2.0f;
+    [SerializeField] [Range(1.0f, 64.0f)] private float volumeGeometryShadowSharpness = 12.0f;
+    [SerializeField] [Range(0.25f, 4.0f)] private float volumeGeometryShadowMinStepScale = 1.0f;
     [SerializeField] [Range(0.0f, 1.0f)] private float volumeSurfaceOcclusionStrength = 0.28f;
     [SerializeField] [Min(0.001f)] private float volumeSurfaceOcclusionRadius = 0.22f;
 
@@ -223,6 +226,7 @@ public class SdfRaymarchDriver : MonoBehaviour
     private static readonly int VolumeLightDensityId = Shader.PropertyToID("_VolumeLightDensity");
     private static readonly int VolumeLightAnisotropyId = Shader.PropertyToID("_VolumeLightAnisotropy");
     private static readonly int VolumeLightSamplesId = Shader.PropertyToID("_VolumeLightSamples");
+    private static readonly int VolumeSampleJitterStrengthId = Shader.PropertyToID("_VolumeSampleJitterStrength");
     private static readonly int VolumeLightMaxDistanceId = Shader.PropertyToID("_VolumeLightMaxDistance");
     private static readonly int VolumeLightMaxStepLengthId = Shader.PropertyToID("_VolumeLightMaxStepLength");
     private static readonly int VolumeLightShadowStrengthId = Shader.PropertyToID("_VolumeLightShadowStrength");
@@ -269,6 +273,8 @@ public class SdfRaymarchDriver : MonoBehaviour
     private static readonly int VolumeCloudDensityBoostId = Shader.PropertyToID("_VolumeCloudDensityBoost");
     private static readonly int VolumeShadowSamplesId = Shader.PropertyToID("_VolumeShadowSamples");
     private static readonly int VolumeShadowMaxDistanceId = Shader.PropertyToID("_VolumeShadowMaxDistance");
+    private static readonly int VolumeGeometryShadowSharpnessId = Shader.PropertyToID("_VolumeGeometryShadowSharpness");
+    private static readonly int VolumeGeometryShadowMinStepScaleId = Shader.PropertyToID("_VolumeGeometryShadowMinStepScale");
     private static readonly int VolumePointLightEnabledId = Shader.PropertyToID("_VolumePointLightEnabled");
     private static readonly int VolumePointLightPositionWSId = Shader.PropertyToID("_VolumePointLightPositionWS");
     private static readonly int VolumePointLightColorId = Shader.PropertyToID("_VolumePointLightColor");
@@ -524,6 +530,7 @@ public class SdfRaymarchDriver : MonoBehaviour
         Shader.SetGlobalFloat(VolumeLightDensityId, volumeLightDensity);
         Shader.SetGlobalFloat(VolumeLightAnisotropyId, volumeLightAnisotropy);
         Shader.SetGlobalFloat(VolumeLightSamplesId, volumeLightSamples);
+        Shader.SetGlobalFloat(VolumeSampleJitterStrengthId, volumeSampleJitterStrength);
         Shader.SetGlobalFloat(VolumeLightMaxDistanceId, volumeLightMaxDistance);
         Shader.SetGlobalFloat(VolumeLightMaxStepLengthId, volumeLightMaxStepLength);
         Shader.SetGlobalFloat(VolumeLightShadowStrengthId, volumeLightShadowStrength);
@@ -570,6 +577,8 @@ public class SdfRaymarchDriver : MonoBehaviour
         Shader.SetGlobalFloat(VolumeCloudDensityBoostId, volumeCloudDensityBoost);
         Shader.SetGlobalFloat(VolumeShadowSamplesId, volumeShadowSamples);
         Shader.SetGlobalFloat(VolumeShadowMaxDistanceId, volumeShadowMaxDistance);
+        Shader.SetGlobalFloat(VolumeGeometryShadowSharpnessId, volumeGeometryShadowSharpness);
+        Shader.SetGlobalFloat(VolumeGeometryShadowMinStepScaleId, volumeGeometryShadowMinStepScale);
         Shader.SetGlobalFloat(VolumePointLightEnabledId, volumePointLightEnabled ? 1.0f : 0.0f);
         Shader.SetGlobalVector(
             VolumePointLightPositionWSId,
@@ -935,6 +944,7 @@ public class SdfRaymarchDriver : MonoBehaviour
             hash = hash * 31 + volumeLightDensity.GetHashCode();
             hash = hash * 31 + volumeLightAnisotropy.GetHashCode();
             hash = hash * 31 + volumeLightSamples;
+            hash = hash * 31 + volumeSampleJitterStrength.GetHashCode();
             hash = hash * 31 + volumeLightMaxDistance.GetHashCode();
             hash = hash * 31 + volumeLightMaxStepLength.GetHashCode();
             hash = hash * 31 + volumeLightShadowStrength.GetHashCode();
@@ -981,6 +991,8 @@ public class SdfRaymarchDriver : MonoBehaviour
             hash = hash * 31 + volumeCloudDensityBoost.GetHashCode();
             hash = hash * 31 + volumeShadowSamples;
             hash = hash * 31 + volumeShadowMaxDistance.GetHashCode();
+            hash = hash * 31 + volumeGeometryShadowSharpness.GetHashCode();
+            hash = hash * 31 + volumeGeometryShadowMinStepScale.GetHashCode();
             hash = hash * 31 + (volumePointLightEnabled ? 1 : 0);
             AppendHash(ref hash, volumePointLightPositionWS);
             AppendHash(ref hash, volumePointLightColor);
@@ -1103,6 +1115,7 @@ public class SdfRaymarchDriver : MonoBehaviour
         propertyBlock.SetFloat(VolumeLightDensityId, volumeLightDensity);
         propertyBlock.SetFloat(VolumeLightAnisotropyId, volumeLightAnisotropy);
         propertyBlock.SetFloat(VolumeLightSamplesId, volumeLightSamples);
+        propertyBlock.SetFloat(VolumeSampleJitterStrengthId, volumeSampleJitterStrength);
         propertyBlock.SetFloat(VolumeLightMaxDistanceId, volumeLightMaxDistance);
         propertyBlock.SetFloat(VolumeLightMaxStepLengthId, volumeLightMaxStepLength);
         propertyBlock.SetFloat(VolumeLightShadowStrengthId, volumeLightShadowStrength);
@@ -1149,6 +1162,8 @@ public class SdfRaymarchDriver : MonoBehaviour
         propertyBlock.SetFloat(VolumeCloudDensityBoostId, volumeCloudDensityBoost);
         propertyBlock.SetFloat(VolumeShadowSamplesId, volumeShadowSamples);
         propertyBlock.SetFloat(VolumeShadowMaxDistanceId, volumeShadowMaxDistance);
+        propertyBlock.SetFloat(VolumeGeometryShadowSharpnessId, volumeGeometryShadowSharpness);
+        propertyBlock.SetFloat(VolumeGeometryShadowMinStepScaleId, volumeGeometryShadowMinStepScale);
         propertyBlock.SetFloat(VolumePointLightEnabledId, volumePointLightEnabled ? 1.0f : 0.0f);
         propertyBlock.SetVector(
             VolumePointLightPositionWSId,

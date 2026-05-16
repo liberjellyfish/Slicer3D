@@ -46,18 +46,28 @@ float TraceVolumeGeometryVisibility(float3 shadowOrigin, float3 lightDir, float 
         return 1.0;
     }
 
-    float minStep = max(_HitEpsilon * 2.0, 0.001);
+    float minStep = max(_HitEpsilon * 2.0 * max(_VolumeGeometryShadowMinStepScale, 0.25), 0.001);
     float maxStep = max(minStep, _VolumeLightMaxStepLength * 1.5);
     float t = minStep;
+    float visibility = 1.0;
+    float previousDistance = 1e20;
+    float sharpness = max(_VolumeGeometryShadowSharpness, 1.0);
+
     [loop]
     for (int stepIndex = 0; stepIndex < 64; stepIndex++)
     {
         if (stepIndex >= (int)max(_VolumeShadowSamples, 4.0) || t >= maxShadowDistance) break;
         float h = ShadowSceneMap(shadowOrigin + lightDir * t, -1);
         if (h < _HitEpsilon) return 0.0;
-        t += clamp(h, minStep, maxStep);
+
+        float y = h * h / max(2.0 * previousDistance, 1e-4);
+        float penumbraDistance = sqrt(max(h * h - y * y, 0.0));
+        visibility = min(visibility, sharpness * penumbraDistance / max(t - y, 1e-4));
+        previousDistance = h;
+
+        t += clamp(max(h, y), minStep, maxStep);
     }
-    return 1.0;
+    return saturate(visibility);
 }
 
 float EvaluateSceneSurfaceOcclusion(float3 samplePosition)
@@ -173,7 +183,7 @@ float TraceSceneSurfaceEnd(float3 rayOrigin, float3 rayDir, float segmentStart, 
     return segmentEnd;
 }
 
-VolumeTerms EvaluateVolumeLighting(float3 rayOrigin, float3 rayDir, float3 rayDirWS, float segmentStart, float segmentEnd, float3 mainLightDirWS, float3 mainLightColor, int tileIndex)
+VolumeTerms EvaluateVolumeLighting(float3 rayOrigin, float3 rayDir, float3 rayDirWS, float segmentStart, float segmentEnd, float3 mainLightDirWS, float3 mainLightColor, int tileIndex, float sampleJitter01)
 {
     VolumeTerms terms;
     terms.scattering = 0.0;
@@ -222,7 +232,7 @@ VolumeTerms EvaluateVolumeLighting(float3 rayOrigin, float3 rayDir, float3 rayDi
     {
         if (sampleIndex >= sampleCount || sampleT >= segmentEnd) break;
         float currentStepLength = min(stepLength, segmentEnd - sampleT);
-        float3 samplePosition = rayOrigin + rayDir * (sampleT + currentStepLength * 0.5);
+        float3 samplePosition = rayOrigin + rayDir * (sampleT + currentStepLength * saturate(sampleJitter01));
         float sigmaA, sigmaS, sigmaT, shapeMaskDebug, densityDebug;
         float3 emissionRadiance;
         GetParticipatingMedia(samplePosition, sigmaA, sigmaS, sigmaT, emissionRadiance, shapeMaskDebug, densityDebug, tileIndex);

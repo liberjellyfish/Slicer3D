@@ -146,6 +146,19 @@ float SdfLuminance(float3 color)
     return dot(color, float3(0.2126, 0.7152, 0.0722));
 }
 
+float SdfHash12(float2 p)
+{
+    float3 p3 = frac(float3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return frac((p3.x + p3.y) * p3.z);
+}
+
+float SdfStableVolumeSampleJitter(float2 pixelPosition)
+{
+    float noise = lerp(0.1, 0.9, SdfHash12(floor(pixelPosition)));
+    return lerp(0.5, noise, saturate(_VolumeSampleJitterStrength));
+}
+
 float EvaluateScatteringPhase(float3 lightDirWS, float3 viewDirWS)
 {
     float g = clamp(_VolumeLightAnisotropy, -0.8, 0.8);

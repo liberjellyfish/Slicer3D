@@ -21,6 +21,7 @@ public class SdfCloudVolumeController : MonoBehaviour
     [SerializeField] private CloudProfile profile = CloudProfile.ExplosionCloud;
     [SerializeField] private bool applyOnEnable = true;
     [SerializeField] private bool applyOnValidate = true;
+    [SerializeField] private bool applyAutomaticallyInPlayMode = false;
     [SerializeField] private bool refreshProfileDefaultsOnValidate = false;
     [SerializeField] private bool animateWarmCoreLightInPlayMode = false;
 
@@ -65,7 +66,7 @@ public class SdfCloudVolumeController : MonoBehaviour
     private void OnEnable()
     {
         CacheReferences();
-        if (applyOnEnable)
+        if (applyOnEnable && ShouldApplyAutomatically())
         {
             ApplyToDriver();
         }
@@ -75,7 +76,7 @@ public class SdfCloudVolumeController : MonoBehaviour
     {
         ClampSettings();
         CacheReferences();
-        if (applyOnValidate && isActiveAndEnabled)
+        if (applyOnValidate && isActiveAndEnabled && ShouldApplyAutomatically())
         {
             if (refreshProfileDefaultsOnValidate)
             {
@@ -84,6 +85,11 @@ public class SdfCloudVolumeController : MonoBehaviour
 
             ApplyToDriver();
         }
+    }
+
+    private bool ShouldApplyAutomatically()
+    {
+        return !Application.isPlaying || applyAutomaticallyInPlayMode;
     }
 
     private void LateUpdate()

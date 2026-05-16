@@ -101,10 +101,13 @@ float TraceVolumeGeometryVisibility(float3 shadowOriginOS, float3 lightDirOS, fl
         return 1.0;
     }
 
-    float minStep = max(_HitEpsilon * 2.0, 0.001);
+    float minStep = max(_HitEpsilon * 2.0 * max(_VolumeGeometryShadowMinStepScale, 0.25), 0.001);
     float maxStep = max(minStep, _VolumeLightMaxStepLength * 1.5);
     int stepCount = min(max((int)_VolumeShadowSamples, 4), 64);
     float t = minStep;
+    float visibility = 1.0;
+    float previousDistance = 1e20;
+    float sharpness = max(_VolumeGeometryShadowSharpness, 1.0);
 
     [loop]
     for (int stepIndex = 0; stepIndex < stepCount; stepIndex++)
@@ -120,10 +123,15 @@ float TraceVolumeGeometryVisibility(float3 shadowOriginOS, float3 lightDirOS, fl
             return 0.0;
         }
 
-        t += clamp(geometryDistance, minStep, maxStep);
+        float y = geometryDistance * geometryDistance / max(2.0 * previousDistance, 1e-4);
+        float penumbraDistance = sqrt(max(geometryDistance * geometryDistance - y * y, 0.0));
+        visibility = min(visibility, sharpness * penumbraDistance / max(t - y, 1e-4));
+        previousDistance = geometryDistance;
+
+        t += clamp(max(geometryDistance, y), minStep, maxStep);
     }
 
-    return 1.0;
+    return saturate(visibility);
 }
 
 float TraceVolumeMediaTransmittance(float3 shadowOriginOS, float3 lightDirOS, float maxShadowDistance)

@@ -9,7 +9,8 @@ SdfVolumeTerms EvaluateVolumeLighting(
     float segmentEnd,
     float3 mainLightDirWS,
     float3 mainLightColor,
-    int tileIndex)
+    int tileIndex,
+    float sampleJitter01)
 {
     SdfVolumeTerms volumeTerms;
     volumeTerms.scattering = 0.0;
@@ -70,7 +71,7 @@ SdfVolumeTerms EvaluateVolumeLighting(
         }
 
         float currentStepLength = min(stepLength, segmentEnd - sampleT);
-        float3 samplePositionOS = rayOriginOS + rayDirOS * (sampleT + currentStepLength * 0.5);
+        float3 samplePositionOS = rayOriginOS + rayDirOS * (sampleT + currentStepLength * saturate(sampleJitter01));
         float sigmaA;
         float sigmaS;
         float sigmaT;

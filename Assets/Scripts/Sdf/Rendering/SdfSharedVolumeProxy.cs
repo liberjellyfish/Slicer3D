@@ -120,6 +120,19 @@ public class SdfSharedVolumeProxy : MonoBehaviour
         set => autoFitBounds = value;
     }
 
+    public void SetScreenSpaceVolumeEnabled(bool enabled)
+    {
+        if (useScreenSpaceVolume == enabled)
+        {
+            return;
+        }
+
+        useScreenSpaceVolume = enabled;
+        lastRendererConfigHash = int.MinValue;
+        ConfigureVolumeDriver();
+        UploadSceneSdfData();
+    }
+
     public Vector3 ManualCenter
     {
         get => manualCenter;

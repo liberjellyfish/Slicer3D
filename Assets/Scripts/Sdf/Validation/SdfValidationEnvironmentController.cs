@@ -27,6 +27,13 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         SurfaceAmbientOcclusion = 16
     }
 
+    public enum VolumeRenderPathMode
+    {
+        ProjectDefault = 0,
+        ScreenSpacePostProcess = 1,
+        RaymarchProxy = 2
+    }
+
     [Header("References")]
     [SerializeField] private Light directionalLight;
     [SerializeField] private SdfLightingValidationRig lightingValidationRig;
@@ -68,11 +75,15 @@ public class SdfValidationEnvironmentController : MonoBehaviour
 
     [Header("Volume Preset")]
     [SerializeField] private bool applyVolumePresetInValidationModes = true;
+    [SerializeField] private bool applyVolumePresetInPlayMode = false;
     [SerializeField] private SdfRaymarchDriver.VolumePreset volumePreset = SdfRaymarchDriver.VolumePreset.CinematicWarm;
 
     [Header("Volume Ownership")]
     [SerializeField] private bool enforceSingleVolumeBackground = true;
     [SerializeField] private SdfRaymarchDriver.VolumeContributionMode nonOwnerVolumeContributionMode = SdfRaymarchDriver.VolumeContributionMode.SurfaceOnly;
+
+    [Header("Volume Render Path Debug")]
+    [SerializeField] private VolumeRenderPathMode volumeRenderPath = VolumeRenderPathMode.ProjectDefault;
 
     [Header("Virtual Point Light")]
     [SerializeField] private bool enableVirtualPointLight = true;
@@ -162,8 +173,9 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         ApplyBackdrop(validationActive);
         ApplyDust(volumeValidationActive);
         ApplyRig(validationActive);
-        ApplyVolumePresetIfNeeded(volumeValidationActive);
+        ApplyVolumePresetIfNeeded(volumeValidationActive, false);
         ApplyVolumeBackgroundOwnership();
+        ApplyVolumeRenderPath(volumeValidationActive);
         if (volumeValidationActive)
         {
             UpdateVirtualPointLight();
@@ -197,8 +209,9 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     public void ApplyVolumePresetToDrivers()
     {
         AutoResolveReferences(true);
-        ApplyVolumePresetIfNeeded(true);
+        ApplyVolumePresetIfNeeded(true, true);
         ApplyVolumeBackgroundOwnership();
+        ApplyVolumeRenderPath(true);
         UpdateVirtualPointLight();
     }
 
@@ -422,9 +435,14 @@ public class SdfValidationEnvironmentController : MonoBehaviour
             enableIntensityPulse: IsVolumeValidationMode(validationMode) && pulseLightIntensityInVolumeMode);
     }
 
-    private void ApplyVolumePresetIfNeeded(bool volumeValidationActive)
+    private void ApplyVolumePresetIfNeeded(bool volumeValidationActive, bool force)
     {
         if (!applyVolumePresetInValidationModes || !volumeValidationActive)
+        {
+            return;
+        }
+
+        if (!force && Application.isPlaying && !applyVolumePresetInPlayMode)
         {
             return;
         }
@@ -450,6 +468,26 @@ public class SdfValidationEnvironmentController : MonoBehaviour
                 sdfDrivers[i].ApplyVolumePreset(volumePreset);
             }
         }
+    }
+
+    private void ApplyVolumeRenderPath(bool volumeValidationActive)
+    {
+        if (sharedVolumeProxy == null)
+        {
+            return;
+        }
+
+        if (!volumeValidationActive)
+        {
+            return;
+        }
+
+        if (volumeRenderPath == VolumeRenderPathMode.ProjectDefault)
+        {
+            return;
+        }
+
+        sharedVolumeProxy.SetScreenSpaceVolumeEnabled(volumeRenderPath == VolumeRenderPathMode.ScreenSpacePostProcess);
     }
 
     [ContextMenu("Apply Volume Background Ownership")]

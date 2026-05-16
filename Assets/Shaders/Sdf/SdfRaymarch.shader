@@ -48,6 +48,7 @@ Shader "Custom/Sdf/Raymarch"
         _VolumeLightDensity ("Volume Light Density", Range(0.0, 8.0)) = 1.4
         _VolumeLightAnisotropy ("Volume Light Anisotropy", Range(-0.8, 0.8)) = 0.15
         _VolumeLightSamples ("Volume Light Samples", Range(4, 32)) = 20
+        _VolumeSampleJitterStrength ("Volume Sample Jitter Strength", Range(0.0, 1.0)) = 0.85
         _VolumeLightMaxDistance ("Volume Light Max Distance", Float) = 1.2
         _VolumeLightMaxStepLength ("Volume Light Max Step Length", Float) = 0.06
         _VolumeLightShadowStrength ("Volume Light Shadow Strength", Range(0.0, 1.0)) = 0.75
@@ -92,6 +93,8 @@ Shader "Custom/Sdf/Raymarch"
         _VolumeCloudDensityBoost ("Volume Cloud Density Boost", Range(0.0, 4.0)) = 1.25
         _VolumeShadowSamples ("Volume Shadow Samples", Range(4, 64)) = 16
         _VolumeShadowMaxDistance ("Volume Shadow Max Distance", Float) = 2.0
+        _VolumeGeometryShadowSharpness ("Volume Geometry Shadow Sharpness", Range(1.0, 64.0)) = 12.0
+        _VolumeGeometryShadowMinStepScale ("Volume Geometry Shadow Min Step Scale", Range(0.25, 4.0)) = 1.0
         _VolumePointLightEnabled ("Volume Point Light Enabled", Range(0.0, 1.0)) = 0.0
         _VolumePointLightPositionWS ("Volume Point Light Position WS", Vector) = (1.4, 1.6, -2.2, 1.0)
         _VolumePointLightColor ("Volume Point Light Color", Color) = (1.0, 0.76, 0.48, 1.0)
@@ -250,6 +253,7 @@ Shader "Custom/Sdf/Raymarch"
                 float _VolumeLightDensity;
                 float _VolumeLightAnisotropy;
                 float _VolumeLightSamples;
+                float _VolumeSampleJitterStrength;
                 float _VolumeLightMaxDistance;
                 float _VolumeLightMaxStepLength;
                 float _VolumeLightShadowStrength;
@@ -294,6 +298,8 @@ Shader "Custom/Sdf/Raymarch"
                 float _VolumeCloudDensityBoost;
                 float _VolumeShadowSamples;
                 float _VolumeShadowMaxDistance;
+                float _VolumeGeometryShadowSharpness;
+                float _VolumeGeometryShadowMinStepScale;
                 float _VolumePointLightEnabled;
                 float4 _VolumePointLightPositionWS;
                 float4 _VolumePointLightColor;
@@ -423,6 +429,7 @@ Shader "Custom/Sdf/Raymarch"
                 bool wantsBackgroundVolume = !hit && _VolumeBackgroundContribution > 0.5;
                 if (wantsSurfaceVolume || wantsBackgroundVolume || _DebugView > 0.5)
                 {
+                    float volumeSampleJitter = SdfStableVolumeSampleJitter(input.positionCS.xy);
                     volumeTerms = EvaluateVolumeLighting(
                         rayOriginOS,
                         rayDirOS,
@@ -431,7 +438,8 @@ Shader "Custom/Sdf/Raymarch"
                         volumeEnd,
                         normalize(volumeLight.direction),
                         volumeLight.color,
-                        sdfCutTileIndex);
+                        sdfCutTileIndex,
+                        volumeSampleJitter);
                 }
 
                 SdfSurfaceData surfaceData;
