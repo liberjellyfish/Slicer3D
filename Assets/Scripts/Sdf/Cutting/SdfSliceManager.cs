@@ -18,11 +18,11 @@ public class SdfSliceManager : MonoBehaviour
     [SerializeField] [Min(0.01f)] private float separationDuration = 0.15f;
 
     [Header("Orbit Focus")]
-    [SerializeField] private OrbitFocusAnchor orbitFocusAnchor;
+    [SerializeField] private OrbitFocusAnchor orbitFocusAnchor = null;
     [SerializeField] private bool updateOrbitFocusDuringSeparation = true;
 
     [Header("Validation")]
-    [SerializeField] private SdfCutDustFieldController cutDustFieldController;
+    [SerializeField] private SdfCutDustFieldController cutDustFieldController = null;
 
     [Header("Debug")]
     [SerializeField] private bool showDebugGizmos = true;

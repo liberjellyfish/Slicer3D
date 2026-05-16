@@ -10,7 +10,7 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
     private struct ProxyDefinition
     {
         public string name;
-        public SdfPhase1Driver.ShapeMode shapeMode;
+        public SdfRaymarchDriver.ShapeMode shapeMode;
         public PrimitiveType primitiveType;
         public Vector3 localCenter;
         public Vector3 localEulerAngles;
@@ -18,9 +18,9 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
     }
 
     [Header("Source")]
-    [SerializeField] private Transform targetRoot;
-    [SerializeField] private SdfSharedVolumeProxy sharedVolumeProxy;
-    [SerializeField] private Material sdfMaterial;
+    [SerializeField] private Transform targetRoot = null;
+    [SerializeField] private SdfSharedVolumeProxy sharedVolumeProxy = null;
+    [SerializeField] private Material sdfMaterial = null;
 
     [Header("Generation")]
     [SerializeField] private bool generateOnEnable = true;
@@ -29,7 +29,7 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
     [SerializeField] private string proxyRootName = "GeneratedSdfTreeProxies";
     [SerializeField] private ProxyDefinition[] proxyDefinitions = Array.Empty<ProxyDefinition>();
 
-    private readonly List<SdfPhase1Driver> generatedDrivers = new List<SdfPhase1Driver>();
+    private readonly List<SdfRaymarchDriver> generatedDrivers = new List<SdfRaymarchDriver>();
 
     private void OnEnable()
     {
@@ -134,10 +134,10 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
             meshRenderer.receiveShadows = false;
         }
 
-        SdfPhase1Driver driver = proxyObject.GetComponent<SdfPhase1Driver>();
+        SdfRaymarchDriver driver = proxyObject.GetComponent<SdfRaymarchDriver>();
         if (driver == null)
         {
-            driver = proxyObject.AddComponent<SdfPhase1Driver>();
+            driver = proxyObject.AddComponent<SdfRaymarchDriver>();
         }
 
         driver.ConfigureShapeSettings(
@@ -147,7 +147,7 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
             Vector3.one * 0.5f,
             Vector3.up,
             0.0f);
-        driver.SetVolumeContributionMode(SdfPhase1Driver.VolumeContributionMode.SurfaceOnly);
+        driver.SetVolumeContributionMode(SdfRaymarchDriver.VolumeContributionMode.SurfaceOnly);
         generatedDrivers.Add(driver);
     }
 
@@ -176,7 +176,7 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
             }
         }
 
-        SdfPhase1Driver[] drivers = SdfSceneDriverUtility.FindSurfaceDrivers();
+        SdfRaymarchDriver[] drivers = SdfSceneDriverUtility.FindSurfaceDrivers();
         for (int i = 0; i < drivers.Length; i++)
         {
             Material material = drivers[i] != null ? drivers[i].GetSharedMaterial() : null;
@@ -186,7 +186,7 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
             }
         }
 
-        Shader shader = Shader.Find("Custom/Sdf/Phase1Raymarch");
+        Shader shader = Shader.Find("Custom/Sdf/Raymarch");
         return shader != null ? new Material(shader) { name = "GeneratedSdfTreeProxyMaterial" } : null;
     }
 
@@ -197,7 +197,7 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
             return;
         }
 
-        SdfPhase1Driver[] surfaceDrivers = SdfSceneDriverUtility.FindSurfaceDrivers(sharedVolumeProxy.VolumeDriver);
+        SdfRaymarchDriver[] surfaceDrivers = SdfSceneDriverUtility.FindSurfaceDrivers(sharedVolumeProxy.VolumeDriver);
         sharedVolumeProxy.SetSurfaceDrivers(surfaceDrivers);
     }
 
@@ -208,7 +208,7 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
             new ProxyDefinition
             {
                 name = "SDF_Trunk",
-                shapeMode = SdfPhase1Driver.ShapeMode.ClippedBox,
+                shapeMode = SdfRaymarchDriver.ShapeMode.ClippedBox,
                 primitiveType = PrimitiveType.Cube,
                 localCenter = new Vector3(0.0f, 1.15f, 0.0f),
                 localEulerAngles = Vector3.zero,
@@ -217,7 +217,7 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
             new ProxyDefinition
             {
                 name = "SDF_Canopy_Main",
-                shapeMode = SdfPhase1Driver.ShapeMode.Sphere,
+                shapeMode = SdfRaymarchDriver.ShapeMode.Sphere,
                 primitiveType = PrimitiveType.Sphere,
                 localCenter = new Vector3(0.0f, 3.05f, 0.0f),
                 localEulerAngles = Vector3.zero,
@@ -226,7 +226,7 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
             new ProxyDefinition
             {
                 name = "SDF_Canopy_Upper",
-                shapeMode = SdfPhase1Driver.ShapeMode.Sphere,
+                shapeMode = SdfRaymarchDriver.ShapeMode.Sphere,
                 primitiveType = PrimitiveType.Sphere,
                 localCenter = new Vector3(0.1f, 3.85f, -0.15f),
                 localEulerAngles = Vector3.zero,
@@ -235,7 +235,7 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
             new ProxyDefinition
             {
                 name = "SDF_Canopy_Left",
-                shapeMode = SdfPhase1Driver.ShapeMode.Sphere,
+                shapeMode = SdfRaymarchDriver.ShapeMode.Sphere,
                 primitiveType = PrimitiveType.Sphere,
                 localCenter = new Vector3(-0.85f, 3.25f, 0.25f),
                 localEulerAngles = Vector3.zero,
@@ -244,7 +244,7 @@ public sealed class SdfTreeProxyAuthoring : MonoBehaviour
             new ProxyDefinition
             {
                 name = "SDF_Canopy_Right",
-                shapeMode = SdfPhase1Driver.ShapeMode.Sphere,
+                shapeMode = SdfRaymarchDriver.ShapeMode.Sphere,
                 primitiveType = PrimitiveType.Sphere,
                 localCenter = new Vector3(0.85f, 3.15f, -0.2f),
                 localEulerAngles = Vector3.zero,

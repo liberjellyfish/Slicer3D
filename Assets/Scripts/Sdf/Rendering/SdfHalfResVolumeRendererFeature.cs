@@ -8,8 +8,8 @@ using UnityEngine.Rendering.Universal;
 public sealed class SdfHalfResVolumeRendererFeature : ScriptableRendererFeature
 {
     [SerializeField] private RenderPassEvent renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
-    [SerializeField] private Material volumeMaterial;
-    [SerializeField] private Shader upsampleShader;
+    [SerializeField] private Material volumeMaterial = null;
+    [SerializeField] private Shader upsampleShader = null;
     [SerializeField] [Range(1, 4)] private int downsample = 2;
     [SerializeField] private bool bilateralUpsample = true;
     [SerializeField] [Min(0.001f)] private float depthSensitivity = 0.025f;

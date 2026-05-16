@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 
 [DisallowMultipleComponent]
-[RequireComponent(typeof(SdfPhase1Driver))]
+[RequireComponent(typeof(SdfRaymarchDriver))]
 [RequireComponent(typeof(SdfCutPlaneBufferController))]
 [RequireComponent(typeof(BoxCollider))]
 public class SdfSliceablePiece : MonoBehaviour

@@ -4,7 +4,7 @@ using UnityEngine;
 
 public static class SdfSceneDriverUtility
 {
-    public static bool IsRenderableSurfaceDriver(SdfPhase1Driver driver, SdfPhase1Driver excludedDriver = null)
+    public static bool IsRenderableSurfaceDriver(SdfRaymarchDriver driver, SdfRaymarchDriver excludedDriver = null)
     {
         if (driver == null || driver == excludedDriver)
         {
@@ -26,18 +26,18 @@ public static class SdfSceneDriverUtility
         return renderer != null && renderer.enabled && renderer.gameObject.activeInHierarchy;
     }
 
-    public static SdfPhase1Driver[] FindSurfaceDrivers(SdfPhase1Driver excludedDriver = null)
+    public static SdfRaymarchDriver[] FindSurfaceDrivers(SdfRaymarchDriver excludedDriver = null)
     {
-        SdfPhase1Driver[] foundDrivers = UnityEngine.Object.FindObjectsByType<SdfPhase1Driver>(FindObjectsSortMode.None);
+        SdfRaymarchDriver[] foundDrivers = UnityEngine.Object.FindObjectsByType<SdfRaymarchDriver>(FindObjectsSortMode.None);
         if (foundDrivers == null || foundDrivers.Length <= 0)
         {
-            return Array.Empty<SdfPhase1Driver>();
+            return Array.Empty<SdfRaymarchDriver>();
         }
 
-        List<SdfPhase1Driver> surfaceDrivers = new List<SdfPhase1Driver>(foundDrivers.Length);
+        List<SdfRaymarchDriver> surfaceDrivers = new List<SdfRaymarchDriver>(foundDrivers.Length);
         for (int i = 0; i < foundDrivers.Length; i++)
         {
-            SdfPhase1Driver driver = foundDrivers[i];
+            SdfRaymarchDriver driver = foundDrivers[i];
             if (!IsRenderableSurfaceDriver(driver, excludedDriver))
             {
                 continue;
@@ -49,7 +49,7 @@ public static class SdfSceneDriverUtility
         return surfaceDrivers.ToArray();
     }
 
-    public static bool TryGetCombinedBounds(IReadOnlyList<SdfPhase1Driver> drivers, out Bounds combinedBounds)
+    public static bool TryGetCombinedBounds(IReadOnlyList<SdfRaymarchDriver> drivers, out Bounds combinedBounds)
     {
         combinedBounds = default;
         bool hasBounds = false;
@@ -60,7 +60,7 @@ public static class SdfSceneDriverUtility
 
         for (int i = 0; i < drivers.Count; i++)
         {
-            SdfPhase1Driver driver = drivers[i];
+            SdfRaymarchDriver driver = drivers[i];
             if (!IsRenderableSurfaceDriver(driver))
             {
                 continue;

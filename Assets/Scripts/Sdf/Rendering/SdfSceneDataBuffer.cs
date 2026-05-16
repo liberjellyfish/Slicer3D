@@ -65,7 +65,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
         return shapeBuffer != null && cutPlaneBuffer != null && cutInfluenceBuffer != null && shapeCount > 0;
     }
 
-    public bool Upload(Renderer targetRenderer, Transform sceneTransform, IReadOnlyList<SdfPhase1Driver> sources, MaterialPropertyBlock propertyBlock)
+    public bool Upload(Renderer targetRenderer, Transform sceneTransform, IReadOnlyList<SdfRaymarchDriver> sources, MaterialPropertyBlock propertyBlock)
     {
         if (targetRenderer == null || sceneTransform == null || propertyBlock == null)
         {
@@ -96,7 +96,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
         return buffersChanged || LastSyncBoundRendererProperties || globalsChanged;
     }
 
-    public bool UploadGlobals(Transform sceneTransform, IReadOnlyList<SdfPhase1Driver> sources)
+    public bool UploadGlobals(Transform sceneTransform, IReadOnlyList<SdfRaymarchDriver> sources)
     {
         if (sceneTransform == null)
         {
@@ -127,7 +127,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
         lastRendererShapeCount = -1;
     }
 
-    private void BuildSceneData(Transform sceneTransform, IReadOnlyList<SdfPhase1Driver> sources)
+    private void BuildSceneData(Transform sceneTransform, IReadOnlyList<SdfRaymarchDriver> sources)
     {
         using (BuildSceneDataMarker.Auto())
         {
@@ -140,7 +140,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
             {
                 for (int i = 0; i < sources.Count; i++)
                 {
-                    SdfPhase1Driver driver = sources[i];
+                    SdfRaymarchDriver driver = sources[i];
                     if (!SdfSceneDriverUtility.IsRenderableSurfaceDriver(driver))
                     {
                         continue;
@@ -193,7 +193,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
         }
     }
 
-    private bool UploadBuffers(Transform sceneTransform, IReadOnlyList<SdfPhase1Driver> sources)
+    private bool UploadBuffers(Transform sceneTransform, IReadOnlyList<SdfRaymarchDriver> sources)
     {
         using (UploadBuffersMarker.Auto())
         {
@@ -274,7 +274,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
         return true;
     }
 
-    private static CutPlaneData[] GetCutPlanes(SdfPhase1Driver driver)
+    private static CutPlaneData[] GetCutPlanes(SdfRaymarchDriver driver)
     {
         SdfCutPlaneBufferController cutPlaneBufferController = driver.GetComponent<SdfCutPlaneBufferController>();
         return cutPlaneBufferController != null
@@ -289,7 +289,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
             || lastRendererShapeCount != shapeData.Count;
     }
 
-    private int CalculateSceneSourceHash(Transform sceneTransform, IReadOnlyList<SdfPhase1Driver> sources)
+    private int CalculateSceneSourceHash(Transform sceneTransform, IReadOnlyList<SdfRaymarchDriver> sources)
     {
         unchecked
         {
@@ -303,7 +303,7 @@ public sealed class SdfSceneDataBuffer : IDisposable
 
             for (int i = 0; i < sources.Count; i++)
             {
-                SdfPhase1Driver driver = sources[i];
+                SdfRaymarchDriver driver = sources[i];
                 hash = hash * 31 + (driver != null ? driver.GetInstanceID() : 0);
                 bool isRenderable = SdfSceneDriverUtility.IsRenderableSurfaceDriver(driver);
                 hash = hash * 31 + (isRenderable ? 1 : 0);

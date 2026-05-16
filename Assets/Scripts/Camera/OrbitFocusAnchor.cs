@@ -4,7 +4,7 @@ using UnityEngine;
 public class OrbitFocusAnchor : MonoBehaviour
 {
     [Header("Initialization")]
-    [SerializeField] private Transform initialFocusSource;
+    [SerializeField] private Transform initialFocusSource = null;
     [SerializeField] private Vector3 sourceOffset = Vector3.zero;
     [SerializeField] private bool initializeOnEnable = true;
 

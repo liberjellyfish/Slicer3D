@@ -15,7 +15,7 @@ public class SdfCloudVolumeController : MonoBehaviour
 
     [Header("References")]
     [SerializeField] private SdfSharedVolumeProxy sharedVolumeProxy;
-    [SerializeField] private SdfPhase1Driver volumeDriver;
+    [SerializeField] private SdfRaymarchDriver volumeDriver;
 
     [Header("Apply")]
     [SerializeField] private CloudProfile profile = CloudProfile.ExplosionCloud;
@@ -105,10 +105,10 @@ public class SdfCloudVolumeController : MonoBehaviour
             return;
         }
 
-        volumeDriver.ApplyVolumePreset(SdfPhase1Driver.VolumePreset.CinematicWarm);
-        volumeDriver.SetVolumeContributionMode(SdfPhase1Driver.VolumeContributionMode.VolumeOnly);
+        volumeDriver.ApplyVolumePreset(SdfRaymarchDriver.VolumePreset.CinematicWarm);
+        volumeDriver.SetVolumeContributionMode(SdfRaymarchDriver.VolumeContributionMode.VolumeOnly);
         volumeDriver.SetCloudShapeSettings(
-            SdfPhase1Driver.VolumeFogShapeMode.NoiseErodedEllipsoid,
+            SdfRaymarchDriver.VolumeFogShapeMode.NoiseErodedEllipsoid,
             shapeExtents,
             edgeSoftness,
             noiseErosion,
@@ -194,7 +194,7 @@ public class SdfCloudVolumeController : MonoBehaviour
 
         if (volumeDriver == null)
         {
-            volumeDriver = GetComponent<SdfPhase1Driver>();
+            volumeDriver = GetComponent<SdfRaymarchDriver>();
         }
     }
 

@@ -32,7 +32,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
     [SerializeField] private SdfLightingValidationRig lightingValidationRig;
     [SerializeField] private Renderer backdropRenderer;
     [SerializeField] private GameObject dustVisualizationRoot;
-    [SerializeField] private SdfPhase1Driver[] sdfDrivers = System.Array.Empty<SdfPhase1Driver>();
+    [SerializeField] private SdfRaymarchDriver[] sdfDrivers = System.Array.Empty<SdfRaymarchDriver>();
     [SerializeField] private SdfSharedVolumeProxy sharedVolumeProxy;
     [SerializeField] private Camera[] validationCameras = System.Array.Empty<Camera>();
 
@@ -68,15 +68,15 @@ public class SdfValidationEnvironmentController : MonoBehaviour
 
     [Header("Volume Preset")]
     [SerializeField] private bool applyVolumePresetInValidationModes = true;
-    [SerializeField] private SdfPhase1Driver.VolumePreset volumePreset = SdfPhase1Driver.VolumePreset.CinematicWarm;
+    [SerializeField] private SdfRaymarchDriver.VolumePreset volumePreset = SdfRaymarchDriver.VolumePreset.CinematicWarm;
 
     [Header("Volume Ownership")]
     [SerializeField] private bool enforceSingleVolumeBackground = true;
-    [SerializeField] private SdfPhase1Driver.VolumeContributionMode nonOwnerVolumeContributionMode = SdfPhase1Driver.VolumeContributionMode.SurfaceOnly;
+    [SerializeField] private SdfRaymarchDriver.VolumeContributionMode nonOwnerVolumeContributionMode = SdfRaymarchDriver.VolumeContributionMode.SurfaceOnly;
 
     [Header("Virtual Point Light")]
     [SerializeField] private bool enableVirtualPointLight = true;
-    [SerializeField] private Transform virtualPointLightAnchor;
+    [SerializeField] private Transform virtualPointLightAnchor = null;
     [SerializeField] private bool animateVirtualPointLight = true;
     [SerializeField] private Vector3 virtualPointLightCenter = new Vector3(0.0f, 0.4f, -0.25f);
     [SerializeField] [Min(0.05f)] private float virtualPointLightOrbitRadius = 2.35f;
@@ -466,7 +466,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
             sharedVolumeProxy.SetSurfaceDrivers(sdfDrivers);
             if (sharedVolumeProxy.VolumeDriver != null)
             {
-                sharedVolumeProxy.VolumeDriver.SetVolumeContributionMode(SdfPhase1Driver.VolumeContributionMode.VolumeOnly);
+                sharedVolumeProxy.VolumeDriver.SetVolumeContributionMode(SdfRaymarchDriver.VolumeContributionMode.VolumeOnly);
             }
 
             ApplySurfaceOnlyToDrivers();
@@ -478,7 +478,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
             return;
         }
 
-        SdfPhase1Driver owner = FindVolumeBackgroundOwner();
+        SdfRaymarchDriver owner = FindVolumeBackgroundOwner();
         for (int i = 0; i < sdfDrivers.Length; i++)
         {
             if (sdfDrivers[i] == null)
@@ -486,8 +486,8 @@ public class SdfValidationEnvironmentController : MonoBehaviour
                 continue;
             }
 
-            SdfPhase1Driver.VolumeContributionMode mode = sdfDrivers[i] == owner
-                ? SdfPhase1Driver.VolumeContributionMode.Full
+            SdfRaymarchDriver.VolumeContributionMode mode = sdfDrivers[i] == owner
+                ? SdfRaymarchDriver.VolumeContributionMode.Full
                 : nonOwnerVolumeContributionMode;
             sdfDrivers[i].SetVolumeContributionMode(mode);
         }
@@ -507,7 +507,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
                 continue;
             }
 
-            sdfDrivers[i].SetVolumeContributionMode(SdfPhase1Driver.VolumeContributionMode.SurfaceOnly);
+            sdfDrivers[i].SetVolumeContributionMode(SdfRaymarchDriver.VolumeContributionMode.SurfaceOnly);
         }
     }
 
@@ -525,7 +525,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         }
     }
 
-    private SdfPhase1Driver FindVolumeBackgroundOwner()
+    private SdfRaymarchDriver FindVolumeBackgroundOwner()
     {
         Bounds combinedBounds = new Bounds();
         bool hasBounds = false;
@@ -553,7 +553,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         }
 
         Vector3 targetCenter = combinedBounds.center;
-        SdfPhase1Driver bestDriver = null;
+        SdfRaymarchDriver bestDriver = null;
         float bestDistance = float.PositiveInfinity;
         for (int i = 0; i < sdfDrivers.Length; i++)
         {
@@ -616,8 +616,8 @@ public class SdfValidationEnvironmentController : MonoBehaviour
             proxyRenderer.sharedMaterial = sourceMaterial;
         }
 
-        SdfPhase1Driver proxyDriver = proxyObject.AddComponent<SdfPhase1Driver>();
-        proxyDriver.SetVolumeContributionMode(SdfPhase1Driver.VolumeContributionMode.VolumeOnly);
+        SdfRaymarchDriver proxyDriver = proxyObject.AddComponent<SdfRaymarchDriver>();
+        proxyDriver.SetVolumeContributionMode(SdfRaymarchDriver.VolumeContributionMode.VolumeOnly);
         sharedVolumeProxy = proxyObject.AddComponent<SdfSharedVolumeProxy>();
         sharedVolumeProxy.SetSurfaceDrivers(sdfDrivers);
     }
@@ -711,50 +711,50 @@ public class SdfValidationEnvironmentController : MonoBehaviour
 
     private void ApplyDriverDebug(ValidationMode mode)
     {
-        SdfPhase1Driver.DebugViewMode debugView = SdfPhase1Driver.DebugViewMode.Lighting;
+        SdfRaymarchDriver.DebugViewMode debugView = SdfRaymarchDriver.DebugViewMode.Lighting;
         switch (mode)
         {
             case ValidationMode.SoftShadow:
-                debugView = SdfPhase1Driver.DebugViewMode.SdfSoftShadowReadable;
+                debugView = SdfRaymarchDriver.DebugViewMode.SdfSoftShadowReadable;
                 break;
             case ValidationMode.CutSurface:
-                debugView = SdfPhase1Driver.DebugViewMode.CutDominance;
+                debugView = SdfRaymarchDriver.DebugViewMode.CutDominance;
                 break;
             case ValidationMode.SurfaceAmbientOcclusion:
-                debugView = SdfPhase1Driver.DebugViewMode.SurfaceAmbientOcclusion;
+                debugView = SdfRaymarchDriver.DebugViewMode.SurfaceAmbientOcclusion;
                 break;
             case ValidationMode.Volume:
-                debugView = SdfPhase1Driver.DebugViewMode.VolumeLight;
+                debugView = SdfRaymarchDriver.DebugViewMode.VolumeLight;
                 break;
             case ValidationMode.VolumeDensity:
-                debugView = SdfPhase1Driver.DebugViewMode.VolumeDensity;
+                debugView = SdfRaymarchDriver.DebugViewMode.VolumeDensity;
                 break;
             case ValidationMode.VolumeTransmittance:
-                debugView = SdfPhase1Driver.DebugViewMode.VolumeTransmittance;
+                debugView = SdfRaymarchDriver.DebugViewMode.VolumeTransmittance;
                 break;
             case ValidationMode.VolumeShadow:
-                debugView = SdfPhase1Driver.DebugViewMode.VolumeShadow;
+                debugView = SdfRaymarchDriver.DebugViewMode.VolumeShadow;
                 break;
             case ValidationMode.VolumeComposite:
-                debugView = SdfPhase1Driver.DebugViewMode.VolumeLight;
+                debugView = SdfRaymarchDriver.DebugViewMode.VolumeLight;
                 break;
             case ValidationMode.VolumeGeometryShadow:
-                debugView = SdfPhase1Driver.DebugViewMode.VolumeGeometryShadow;
+                debugView = SdfRaymarchDriver.DebugViewMode.VolumeGeometryShadow;
                 break;
             case ValidationMode.VolumeMediaTransmittance:
-                debugView = SdfPhase1Driver.DebugViewMode.VolumeMediaTransmittance;
+                debugView = SdfRaymarchDriver.DebugViewMode.VolumeMediaTransmittance;
                 break;
             case ValidationMode.VolumeSigmaA:
-                debugView = SdfPhase1Driver.DebugViewMode.VolumeSigmaA;
+                debugView = SdfRaymarchDriver.DebugViewMode.VolumeSigmaA;
                 break;
             case ValidationMode.VolumeSigmaS:
-                debugView = SdfPhase1Driver.DebugViewMode.VolumeSigmaS;
+                debugView = SdfRaymarchDriver.DebugViewMode.VolumeSigmaS;
                 break;
             case ValidationMode.VolumeSigmaT:
-                debugView = SdfPhase1Driver.DebugViewMode.VolumeSigmaT;
+                debugView = SdfRaymarchDriver.DebugViewMode.VolumeSigmaT;
                 break;
             case ValidationMode.VolumeShapeMask:
-                debugView = SdfPhase1Driver.DebugViewMode.VolumeShapeMask;
+                debugView = SdfRaymarchDriver.DebugViewMode.VolumeShapeMask;
                 break;
         }
 
@@ -799,7 +799,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         ApplyCurrentMode();
     }
 
-    private void ApplyDebugView(SdfPhase1Driver.DebugViewMode debugView, bool volumeMode)
+    private void ApplyDebugView(SdfRaymarchDriver.DebugViewMode debugView, bool volumeMode)
     {
         RefreshDrivers();
         if (sharedVolumeProxy != null && sharedVolumeProxy.VolumeDriver != null)
@@ -820,7 +820,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
             }
 
             sdfDrivers[i].SetDebugView(volumeMode && sharedVolumeProxy != null
-                ? SdfPhase1Driver.DebugViewMode.Lighting
+                ? SdfRaymarchDriver.DebugViewMode.Lighting
                 : debugView);
         }
     }

@@ -4,7 +4,7 @@ using UnityEngine;
 public class OrbitValidationCamera : MonoBehaviour
 {
     [Header("Target")]
-    [SerializeField] private Transform target;
+    [SerializeField] private Transform target = null;
     [SerializeField] private Vector3 targetOffset = Vector3.zero;
     [SerializeField] private bool autoInitializeFromCurrentTransform = true;
 

@@ -3,7 +3,7 @@ using UnityEngine;
 [ExecuteAlways]
 [RequireComponent(typeof(Renderer))]
 [RequireComponent(typeof(MeshFilter))]
-public class SdfPhase1Driver : MonoBehaviour
+public class SdfRaymarchDriver : MonoBehaviour
 {
     public enum ShapeMode
     {
