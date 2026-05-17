@@ -22,12 +22,24 @@ public static class SdfSceneDriverUtility
             return false;
         }
 
+        SdfObjectRuntime runtime = driver.GetComponent<SdfObjectRuntime>();
+        if (runtime != null && runtime.isActiveAndEnabled && !runtime.ParticipatesInSceneSdf)
+        {
+            return false;
+        }
+
         Renderer renderer = driver.GetComponent<Renderer>();
         return renderer != null && renderer.enabled && renderer.gameObject.activeInHierarchy;
     }
 
     public static SdfRaymarchDriver[] FindSurfaceDrivers(SdfRaymarchDriver excludedDriver = null)
     {
+        SdfRaymarchDriver[] registeredDrivers = SdfSceneRegistry.FindSurfaceDrivers(excludedDriver);
+        if (registeredDrivers.Length > 0)
+        {
+            return registeredDrivers;
+        }
+
         SdfRaymarchDriver[] foundDrivers = UnityEngine.Object.FindObjectsByType<SdfRaymarchDriver>(FindObjectsSortMode.None);
         if (foundDrivers == null || foundDrivers.Length <= 0)
         {

@@ -55,6 +55,8 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     [SerializeField] private int currentVolumeSamples;
     [SerializeField] private int currentShadowSamples;
     [SerializeField] private bool currentScreenSpaceVolumeEnabled;
+    [SerializeField] private int currentSceneRegistryVersion;
+    [SerializeField] private int currentSceneSdfSourceCount;
     [SerializeField] private bool currentCutTileCullingEnabled;
     [SerializeField] private int currentCutTileGridWidth;
     [SerializeField] private int currentCutTileGridHeight;
@@ -71,6 +73,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     private Renderer cachedRenderer;
     private MaterialPropertyBlock propertyBlock;
     private int nextAutoFindFrame;
+    private int lastSurfaceDriverRegistryVersion = int.MinValue;
     private int lastRendererConfigHash = int.MinValue;
     private int lastOwnershipHash = int.MinValue;
     private int lastBoundsHash = int.MinValue;
@@ -245,9 +248,12 @@ public class SdfSharedVolumeProxy : MonoBehaviour
     private bool ConfigureVolumeDriver()
     {
         bool changed = false;
+        bool globalVolumeAllowed = IsGlobalVolumeRenderingAllowed();
         if (volumeDriver != null)
         {
-            volumeDriver.SetVolumeContributionMode(SdfRaymarchDriver.VolumeContributionMode.VolumeOnly);
+            volumeDriver.SetVolumeContributionMode(globalVolumeAllowed
+                ? SdfRaymarchDriver.VolumeContributionMode.VolumeOnly
+                : SdfRaymarchDriver.VolumeContributionMode.Disabled);
         }
 
         if (cachedRenderer != null)
@@ -255,7 +261,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
             int rendererConfigHash = CalculateRendererConfigHash();
             if (rendererConfigHash != lastRendererConfigHash)
             {
-                cachedRenderer.forceRenderingOff = useScreenSpaceVolume && hideProxyRendererInScreenSpace;
+                cachedRenderer.forceRenderingOff = !globalVolumeAllowed || (useScreenSpaceVolume && hideProxyRendererInScreenSpace);
                 cachedRenderer.sortingOrder = sortingOrder;
                 cachedRenderer.shadowCastingMode = ShadowCastingMode.Off;
                 cachedRenderer.receiveShadows = false;
@@ -288,6 +294,11 @@ public class SdfSharedVolumeProxy : MonoBehaviour
                 continue;
             }
 
+            if (SdfLocalVolumeController.ShouldPreserveLocalVolumeMode(driver))
+            {
+                continue;
+            }
+
             driver.SetVolumeContributionMode(SdfRaymarchDriver.VolumeContributionMode.SurfaceOnly);
         }
 
@@ -307,12 +318,15 @@ public class SdfSharedVolumeProxy : MonoBehaviour
             return false;
         }
 
-        if (!force && Application.isPlaying && Time.frameCount < nextAutoFindFrame)
+        int registryVersion = SdfSceneRegistry.MembershipVersion;
+        bool registryChanged = registryVersion != lastSurfaceDriverRegistryVersion;
+        if (!force && !registryChanged && Application.isPlaying && Time.frameCount < nextAutoFindFrame)
         {
             return false;
         }
 
         SdfRaymarchDriver[] foundDrivers = SdfSceneDriverUtility.FindSurfaceDrivers(volumeDriver);
+        lastSurfaceDriverRegistryVersion = registryVersion;
         nextAutoFindFrame = Application.isPlaying
             ? Time.frameCount + Mathf.Max(autoFindRefreshIntervalFrames, 1)
             : 0;
@@ -372,6 +386,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
         using (UploadSceneDataMarker.Auto())
         {
             CacheComponents();
+            bool globalVolumeAllowed = IsGlobalVolumeRenderingAllowed();
             bool sceneDataChanged;
             if (useScreenSpaceVolume)
             {
@@ -384,7 +399,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
             }
 
             bool volumeGlobalsChanged = false;
-            if (useScreenSpaceVolume && volumeDriver != null)
+            if (globalVolumeAllowed && useScreenSpaceVolume && volumeDriver != null)
             {
                 volumeGlobalsChanged = volumeDriver.UploadScreenSpaceVolumeGlobals(
                     transform,
@@ -630,13 +645,21 @@ public class SdfSharedVolumeProxy : MonoBehaviour
             Mathf.Max(value.z, minValue.z));
     }
 
+    private bool IsGlobalVolumeRenderingAllowed()
+    {
+        SdfGlobalVolumeController globalController = GetComponent<SdfGlobalVolumeController>();
+        return globalController == null || !globalController.BlocksSharedProxyVolumeRendering;
+    }
+
     private void UpdateRuntimeStats(bool sceneDataChanged, bool volumeGlobalsChanged)
     {
         currentSdfShapeCount = sceneDataBuffer.ShapeCount;
         currentCutPlaneCount = sceneDataBuffer.CutPlaneCount;
         currentVolumeSamples = volumeDriver != null ? volumeDriver.VolumeLightSampleCount : 0;
         currentShadowSamples = volumeDriver != null ? volumeDriver.VolumeShadowSampleCount : 0;
-        currentScreenSpaceVolumeEnabled = useScreenSpaceVolume && volumeDriver != null;
+        currentScreenSpaceVolumeEnabled = IsGlobalVolumeRenderingAllowed() && useScreenSpaceVolume && volumeDriver != null;
+        currentSceneRegistryVersion = SdfSceneRegistry.Version;
+        currentSceneSdfSourceCount = surfaceDrivers != null ? surfaceDrivers.Length : 0;
         sceneDataVersion = sceneDataBuffer.DataVersion;
         lastSyncRebuiltSceneData = sceneDataChanged && sceneDataBuffer.LastSyncRebuiltData;
         lastSyncUploadedBuffers = sceneDataBuffer.LastSyncUploadedBuffers;
@@ -651,6 +674,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
             int hash = 17;
             hash = hash * 31 + (useScreenSpaceVolume ? 1 : 0);
             hash = hash * 31 + (hideProxyRendererInScreenSpace ? 1 : 0);
+            hash = hash * 31 + (IsGlobalVolumeRenderingAllowed() ? 1 : 0);
             hash = hash * 31 + sortingOrder;
             hash = hash * 31 + (volumeDriver != null ? volumeDriver.GetInstanceID() : 0);
             return hash;
@@ -674,6 +698,7 @@ public class SdfSharedVolumeProxy : MonoBehaviour
             {
                 SdfRaymarchDriver driver = surfaceDrivers[i];
                 hash = hash * 31 + (driver != null ? driver.GetInstanceID() : 0);
+                hash = hash * 31 + SdfLocalVolumeController.GetSharedOwnershipHash(driver);
             }
 
             return hash;

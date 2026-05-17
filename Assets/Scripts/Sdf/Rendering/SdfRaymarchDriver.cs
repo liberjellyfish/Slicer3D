@@ -318,13 +318,20 @@ public class SdfRaymarchDriver : MonoBehaviour
         lastMaterialPropertyHash = int.MinValue;
         lastScreenSpaceGlobalHash = int.MinValue;
         RefreshSceneDataVersion();
+        SdfSceneRegistry.Register(this);
         ApplyProperties();
+    }
+
+    private void OnDisable()
+    {
+        SdfSceneRegistry.Unregister(this);
     }
 
     private void OnValidate()
     {
         CacheComponents();
         RefreshSceneDataVersion();
+        SdfSceneRegistry.MarkDirty(this);
         ApplyProperties();
     }
 
@@ -382,6 +389,7 @@ public class SdfRaymarchDriver : MonoBehaviour
         cutPlaneOffset = baseCutPlaneOffset;
         CacheComponents();
         RefreshSceneDataVersion();
+        SdfSceneRegistry.MarkDirty(this);
         ApplyProperties();
     }
 

@@ -228,8 +228,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Version: 3
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -942,6 +942,8 @@ GameObject:
   - component: {fileID: 1680505280}
   - component: {fileID: 1680505279}
   - component: {fileID: 1680505283}
+  - component: {fileID: 1680505286}
+  - component: {fileID: 1680505287}
   - component: {fileID: 1680505284}
   - component: {fileID: 1680505285}
   m_Layer: 6
@@ -1091,7 +1093,7 @@ MonoBehaviour:
   cutFaceEdgeBoost: 0.35
   cutFaceFreshnessBoost: 0.3
   volumeLightEnabled: 1
-  volumeContributionMode: 0
+  volumeContributionMode: 1
   volumeLightIntensity: 2.8
   volumeLightDensity: 0.82
   volumeLightAnisotropy: 0.15
@@ -1127,6 +1129,84 @@ MonoBehaviour:
   volumeColorTint: {r: 1, g: 0.78, b: 0.54, a: 1}
   debugView: 0
   syncEveryFrame: 1
+--- !u!114 &1680505286
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1680505278}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9ad15d6d5ae1450d953b559cf7c8bb56, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  participatesInSceneSdf: 1
+  objectId: f8cca1eabbb143f59c0ba8fdb5c093bf
+  lineageId: f8cca1eabbb143f59c0ba8fdb5c093bf
+  parentObjectId:
+  dataVersion: 1
+  transformVersion: 1
+  shapeVersion: 1
+  cutPlaneVersion: 0
+--- !u!114 &1680505287
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1680505278}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d13f534000aa467bad574778e2a9cc34, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  profile: 2
+  applyOnEnable: 1
+  applyOnValidate: 1
+  applyAutomaticallyInPlayMode: 0
+  refreshProfileDefaultsOnValidate: 0
+  animateWarmCoreLightInPlayMode: 0
+  applyDriverPresetBeforeSettings: 1
+  driverPreset: 1
+  shapeExtents: {x: 0.72, y: 0.42, z: 0.72}
+  edgeSoftness: 0.18
+  noiseErosion: 0.64
+  noiseScale: 2.2
+  coverage: 0.52
+  softness: 0.18
+  detailStrength: 0.58
+  detailScale: 10
+  warpStrength: 0.48
+  lobeCount: 12
+  lobeSpread: {x: 1, y: 0.32, z: 0.9}
+  lobeRadius: 0.34
+  densityBoost: 0.9
+  lightIntensity: 2.4
+  lightDensity: 0.78
+  baseFogDensity: 0
+  heightFogStrength: 0.006
+  cutFogBoost: 1.35
+  absorptionDensity: 0.18
+  densityThreshold: 0.04
+  alphaClipThreshold: 0.012
+  exposure: 1.12
+  colorTint: {r: 1, g: 0.78, b: 0.62, a: 1}
+  emissionIntensity: 0
+  emissionColor: {r: 1, g: 0.58, b: 0.22, a: 1}
+  enableWarmCoreLight: 1
+  warmCoreLocalPosition: {x: -0.15, y: 0.18, z: -0.35}
+  warmCoreColor: {r: 1, g: 0.68, b: 0.28, a: 1}
+  warmCoreIntensity: 12
+  warmCoreRange: 4.6
+  warmCoreOrbitRadius: 0.18
+  warmCoreOrbitSpeed: 18
+  targetDriver: {fileID: 1680505283}
+  localVolumeEnabled: 0
+  preserveLocalVolumeModeFromSharedProxy: 1
+  enabledContributionMode: 0
+  disabledContributionMode: 1
+  sharedOwnershipVersion: 1
 --- !u!114 &1680505284
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1373,16 +1453,17 @@ MonoBehaviour:
   m_GameObject: {fileID: 1917404101}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 71e6b73105914f349a29f591b4bc8dd5, type: 3}
+  m_Script: {fileID: 11500000, guid: f9975ceb551e4b568ca5f1f4cd3c61f2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  sharedVolumeProxy: {fileID: 1917404106}
-  volumeDriver: {fileID: 1917404105}
   profile: 1
   applyOnEnable: 1
   applyOnValidate: 1
+  applyAutomaticallyInPlayMode: 0
   refreshProfileDefaultsOnValidate: 0
   animateWarmCoreLightInPlayMode: 0
+  applyDriverPresetBeforeSettings: 1
+  driverPreset: 1
   shapeExtents: {x: 0.78, y: 0.62, z: 0.72}
   edgeSoftness: 0.22
   noiseErosion: 0.72
@@ -1415,6 +1496,12 @@ MonoBehaviour:
   warmCoreRange: 4.8
   warmCoreOrbitRadius: 0.18
   warmCoreOrbitSpeed: 18
+  sharedVolumeProxy: {fileID: 1917404106}
+  volumeDriver: {fileID: 1917404105}
+  globalVolumeEnabled: 1
+  useScreenSpaceVolume: 1
+  enabledContributionMode: 3
+  disabledContributionMode: 2
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

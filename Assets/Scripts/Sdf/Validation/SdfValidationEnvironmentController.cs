@@ -451,7 +451,7 @@ public class SdfValidationEnvironmentController : MonoBehaviour
         if (sharedVolumeProxy != null)
         {
             sharedVolumeProxy.ApplyVolumePreset(volumePreset);
-            ApplySharedVolumeCloudController();
+            ApplySharedVolumeController();
             ApplySurfaceOnlyToDrivers();
             return;
         }
@@ -524,6 +524,11 @@ public class SdfValidationEnvironmentController : MonoBehaviour
                 continue;
             }
 
+            if (SdfLocalVolumeController.ShouldPreserveLocalVolumeMode(sdfDrivers[i]))
+            {
+                continue;
+            }
+
             SdfRaymarchDriver.VolumeContributionMode mode = sdfDrivers[i] == owner
                 ? SdfRaymarchDriver.VolumeContributionMode.Full
                 : nonOwnerVolumeContributionMode;
@@ -545,14 +550,26 @@ public class SdfValidationEnvironmentController : MonoBehaviour
                 continue;
             }
 
+            if (SdfLocalVolumeController.ShouldPreserveLocalVolumeMode(sdfDrivers[i]))
+            {
+                continue;
+            }
+
             sdfDrivers[i].SetVolumeContributionMode(SdfRaymarchDriver.VolumeContributionMode.SurfaceOnly);
         }
     }
 
-    private void ApplySharedVolumeCloudController()
+    private void ApplySharedVolumeController()
     {
         if (sharedVolumeProxy == null)
         {
+            return;
+        }
+
+        SdfGlobalVolumeController globalController = sharedVolumeProxy.GetComponent<SdfGlobalVolumeController>();
+        if (globalController != null)
+        {
+            globalController.ApplyToDriver();
             return;
         }
 
